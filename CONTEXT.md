@@ -1,7 +1,7 @@
 # Contexto Atual do Projeto: MINIhub
 
-[Status]: Fase 3 - Desenvolvimento da Camada de Apresentação (Interface)
-[Última Alteração]: Criação da interface inicial do Hub com design em Cards (Estilo Netflix/PlayStation) e módulo Brawl Stars selecionável.
+[Status]: Fase 3 - Desenvolvimento da Camada de Apresentação e Integração de Lógica
+[Última Alteração]: Integração completa do pacote @minihub/business-logic dentro do app Web e criação da tela de gerenciamento do Brawl Stars.
 
 ## 🚫 Diretrizes Mandatórias (NUNCA QUEBRAR):
 1. PROIBIDO adicionar qualquer comentário no código (Ex: // Comentário). O código deve ser limpo e autoexplicativo (Clean Code).
@@ -17,14 +17,15 @@
   - apps/
     - web/
       - src/
-        - App.tsx (Hub Principal com design de Cards)
+        - App.tsx (Hub Principal e Tela do Brawl Stars com cálculo em tempo real)
         - main.tsx
         - index.css
       - package.json
-      - tailwind.config.js
+      - vite.config.ts
   - packages/
     - business-logic/
-      - index.js (Funções matemáticas da meta do Brawl Stars)
+      - src/
+        - index.ts (Funções matemáticas em TypeScript da meta)
       - package.json
   - package.json (Configuração mestre)
   - CONTEXT.md (Este arquivo)
@@ -32,10 +33,11 @@
 ## 🎯 O que já foi feito:
 - [x] Alinhamento do escopo do projeto, regras arquiteturais e setup de ambiente (Node, VS Code, Git Bash).
 - [x] Criação da página de Diário de Bordo no Notion.
-- [x] Inicialização do package.json mestre e estrutura do Monorepo.
-- [x] Desenvolvimento da lógica pura de metas do Brawl Stars em packages/business-logic/index.js.
-- [x] Inicialização do app Web com React, TypeScript, Vite e Tailwind CSS.
-- [x] Criação da interface do Hub estilo catálogo (Brawl Stars ativo e jogos adicionais com cadeado de bloqueio).
+- [x] Inicialização do Monorepo e Workspaces do Node.js.
+- [x] Estruturação modular da lógica em packages/business-logic/src/index.ts.
+- [x] Configuração de atalhos de importação (Aliases) no Vite.
+- [x] Interface do Hub com design de catálogo estilo PlayStation.
+- [x] Criação da tela interna do Brawl Stars integrada com a lógica matemática, suporte a tags, inputs manuais e prazos dinâmicos por dias ou calendário.
 
 ## 🚀 Próximo Passo Crítico:
-- Conectar o pacote @minihub/business-logic dentro do app web e criar a tela interna do gerenciador de metas do Brawl Stars ao clicar no card.
+- Criar a conta no banco de dados do Supabase para começar a salvar as metas criadas pelos usuários na nuvem de verdade ou criar a simulação completa da API do Brawl Stars.
