@@ -1,0 +1,13 @@
+{
+  "name": "minihub-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hub modular de mini-apps multiplataforma",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

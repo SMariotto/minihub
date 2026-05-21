@@ -1,7 +1,7 @@
 # Contexto Atual do Projeto: MINIhub
 
 [Status]: Fase 2 - Estruturação do Esqueleto do Monorepo
-[Última Alteração]: Criação das pastas raiz (apps, packages, docs) e do manual architecture.md.
+[Última Alteração]: Inicialização do package.json na raiz configurado para Workspaces (Monorepo).
 
 ## 🚫 Diretrizes Mandatórias (NUNCA QUEBRAR):
 1. PROIBIDO adicionar qualquer comentário no código (Ex: // Comentário). O código deve ser limpo e autoexplicativo (Clean Code).
@@ -16,6 +16,7 @@
     - architecture.md (Manual de Arquitetura)
   - apps/ (Vazio)
   - packages/ (Vazio)
+  - package.json (Configuração de Workspaces do Node.js)
   - CONTEXT.md (Este arquivo)
 
 ## 🎯 O que já foi feito:
@@ -25,7 +26,8 @@
 - [x] Criação da página de Diário de Bordo no Notion.
 - [x] Criação das pastas principais (apps, docs, packages) no VS Code.
 - [x] Criação do manual técnico docs/architecture.md.
+- [x] Inicialização do package.json mestre na raiz do projeto.
 - [x] Criação do arquivo CONTEXT.md na raiz com regras de entrega total de código.
 
 ## 🚀 Próximo Passo Crítico:
-- Inicializar o arquivo package.json na raiz do projeto para gerenciar o Monorepo com o Node.js.
+- Criar a estrutura do primeiro pacote dentro de packages/business-logic para guardar a matemática do app do Brawl Stars.
