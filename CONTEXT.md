@@ -1,7 +1,7 @@
 # Contexto Atual do Projeto: MINIhub
 
 [Status]: Fase 2 - Estruturação do Esqueleto do Monorepo
-[Última Alteração]: Inicialização do package.json na raiz configurado para Workspaces (Monorepo).
+[Última Alteração]: Criação do pacote @minihub/business-logic dentro de packages/.
 
 ## 🚫 Diretrizes Mandatórias (NUNCA QUEBRAR):
 1. PROIBIDO adicionar qualquer comentário no código (Ex: // Comentário). O código deve ser limpo e autoexplicativo (Clean Code).
@@ -13,21 +13,24 @@
 ## 📊 Estrutura de Pastas Atualizada:
 - minihub-monorepo/
   - docs/
-    - architecture.md (Manual de Arquitetura)
+    - architecture.md
   - apps/ (Vazio)
-  - packages/ (Vazio)
-  - package.json (Configuração de Workspaces do Node.js)
+  - packages/
+    - business-logic/
+      - package.json (Configuração do módulo de lógica)
+  - package.json (Configuração mestre)
   - CONTEXT.md (Este arquivo)
 
 ## 🎯 O que já foi feito:
 - [x] Alinhamento do escopo do projeto e regras arquiteturais.
-- [x] Instalação e configuração do Node.js, VS Code e Git (via terminal).
-- [x] Criação do repositório no GitHub para versionamento.
+- [x] Instalação e configuração do Node.js, VS Code e Git.
+- [x] Criação do repositório no GitHub e ajuste do terminal para Git Bash.
 - [x] Criação da página de Diário de Bordo no Notion.
 - [x] Criação das pastas principais (apps, docs, packages) no VS Code.
 - [x] Criação do manual técnico docs/architecture.md.
 - [x] Inicialização do package.json mestre na raiz do projeto.
+- [x] Criação do módulo interno packages/business-logic com seu respectivo package.json.
 - [x] Criação do arquivo CONTEXT.md na raiz com regras de entrega total de código.
 
 ## 🚀 Próximo Passo Crítico:
-- Criar a estrutura do primeiro pacote dentro de packages/business-logic para guardar a matemática do app do Brawl Stars.
+- Criar a função matemática pura de cálculo de metas diárias do Brawl Stars dentro do pacote business-logic (Sem comentários!).
