@@ -1,11 +1,11 @@
 import { useState } from "react";
-import {
-  calcularMetaDiaria,
-  converterDataEmDias,
-} from "@minihub/business-logic";
+import { calcularMetaDiaria, converterDataEmDias } from "@minihub/business-logic";
+import { supabase } from "./lib/supabase";
 
 type View = "home" | "brawl";
 type PrazoMode = "dias" | "data";
+type SyncStatus = "idle" | "loading" | "success" | "error";
+type SaveStatus = "idle" | "saving" | "success" | "error";
 
 interface HubCard {
   id: number;
@@ -16,27 +16,9 @@ interface HubCard {
 }
 
 const cards: HubCard[] = [
-  {
-    id: 1,
-    title: "Brawl Stars",
-    description: "Gerenciador de Metas de Troféus",
-    status: "active",
-    accentColor: "#e8ff47",
-  },
-  {
-    id: 2,
-    title: "Clash Royale",
-    description: "Em breve",
-    status: "locked",
-    accentColor: "#4fffff",
-  },
-  {
-    id: 3,
-    title: "Clash of Clans",
-    description: "Em breve",
-    status: "locked",
-    accentColor: "#ff9d4e",
-  },
+  { id: 1, title: "Brawl Stars", description: "Gerenciador de Metas de Troféus", status: "active", accentColor: "#e8ff47" },
+  { id: 2, title: "Clash Royale", description: "Em breve", status: "locked", accentColor: "#4fffff" },
+  { id: 3, title: "Clash of Clans", description: "Em breve", status: "locked", accentColor: "#ff9d4e" },
 ];
 
 function LockIcon() {
@@ -87,13 +69,37 @@ function TrophyIcon() {
   );
 }
 
+function SaveIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+      <polyline points="17 21 17 13 7 13 7 21" />
+      <polyline points="7 3 7 8 15 8" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function SpinnerIcon() {
+  return (
+    <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </svg>
+  );
+}
+
 function HomeView({ onNavigate }: { onNavigate: (view: View) => void }) {
   return (
     <div className="flex-1 px-8 py-12 flex flex-col gap-10">
       <div className="flex flex-col gap-1">
-        <h2 className="text-white/90 text-2xl font-display tracking-widest uppercase">
-          Seus Jogos
-        </h2>
+        <h2 className="text-white/90 text-2xl font-display tracking-widest uppercase">Seus Jogos</h2>
         <p className="text-white/30 text-sm">Selecione um módulo para começar</p>
       </div>
 
@@ -131,7 +137,10 @@ function HomeView({ onNavigate }: { onNavigate: (view: View) => void }) {
                 <p className="text-sm text-white/30 font-light">{card.description}</p>
               </div>
               {card.status === "active" && (
-                <div className="h-px w-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-full" style={{ background: `linear-gradient(to right, ${card.accentColor}80, transparent)` }} />
+                <div
+                  className="h-px w-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-full"
+                  style={{ background: `linear-gradient(to right, ${card.accentColor}80, transparent)` }}
+                />
               )}
             </div>
           </div>
@@ -143,12 +152,15 @@ function HomeView({ onNavigate }: { onNavigate: (view: View) => void }) {
 
 function BrawlView() {
   const [tag, setTag] = useState("");
+  const [playerName, setPlayerName] = useState("");
+  const [syncError, setSyncError] = useState("");
   const [trofeusAtuais, setTrofeusAtuais] = useState("");
   const [metaTrofeus, setMetaTrofeus] = useState("");
   const [prazoMode, setPrazoMode] = useState<PrazoMode>("dias");
   const [numeroDias, setNumeroDias] = useState("");
   const [dataFinal, setDataFinal] = useState("");
-  const [syncStatus, setSyncStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
   const diasResolvidos = prazoMode === "dias"
     ? parseInt(numeroDias) || 0
@@ -160,10 +172,62 @@ function BrawlView() {
   const trofeusFaltando = Math.max(0, meta - atual);
   const resultadoValido = diasResolvidos > 0 && meta > atual;
 
-  const handleSync = () => {
+  const handleSync = async () => {
     if (!tag.trim()) return;
     setSyncStatus("loading");
-    setTimeout(() => setSyncStatus("error"), 1500);
+    setSyncError("");
+    setPlayerName("");
+
+    const { data, error } = await supabase.rpc("buscar_brawl_stars", {
+      player_tag: tag.trim(),
+    });
+
+    if (error || !data) {
+      setSyncStatus("error");
+      setSyncError(error?.message || "Erro de conexão com o banco.");
+      return;
+    }
+
+    if (data.reason === "notFound") {
+      setSyncStatus("error");
+      setSyncError("Tag inválida. Use a tag real de jogador (ex: #9YV2CC2).");
+      return;
+    }
+
+    if (data.reason || !data.name) {
+      setSyncStatus("error");
+      setSyncError(data.message || "Erro retornado pela API da Supercell.");
+      return;
+    }
+
+    setPlayerName(data.name);
+    setTrofeusAtuais(data.trophies.toString());
+    setSyncStatus("success");
+  };
+
+  const handleSave = async () => {
+    if (!resultadoValido) return;
+    setSaveStatus("saving");
+    const { error } = await supabase.from("metas_brawl").insert({
+      player_tag: tag.trim() || null,
+      trofeus_atuais: atual,
+      trofeus_meta: meta,
+      prazo_dias: diasResolvidos,
+    });
+    if (error) {
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    } else {
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus("idle"), 4000);
+    }
+  };
+
+  const handleTagChange = (value: string) => {
+    setTag(value.toUpperCase());
+    setSyncStatus("idle");
+    setSyncError("");
+    setPlayerName("");
   };
 
   const inputClass = "w-full bg-[#0d0d0d] border border-border rounded-xl px-4 py-3 text-white text-sm font-body placeholder-white/20 focus:outline-none focus:border-accent/50 transition-colors duration-200";
@@ -183,20 +247,34 @@ function BrawlView() {
               type="text"
               placeholder="#PLAYER TAG"
               value={tag}
-              onChange={(e) => setTag(e.target.value.toUpperCase())}
+              onChange={(e) => handleTagChange(e.target.value)}
               className={inputClass + " flex-1"}
             />
             <button
               onClick={handleSync}
-              disabled={syncStatus === "loading"}
+              disabled={syncStatus === "loading" || !tag.trim()}
               className="flex items-center gap-2 px-4 py-3 rounded-xl border border-accent/30 bg-accent/10 text-accent text-sm font-medium hover:bg-accent/20 transition-colors duration-200 disabled:opacity-50 whitespace-nowrap"
             >
-              <SyncIcon />
+              {syncStatus === "loading" ? <SpinnerIcon /> : <SyncIcon />}
               {syncStatus === "loading" ? "Buscando..." : "Sincronizar"}
             </button>
           </div>
+
+          {syncStatus === "success" && playerName && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/10 border border-accent/20">
+              <CheckIcon />
+              <span className="text-xs text-accent font-medium">
+                {playerName} · {trofeusAtuais} troféus sincronizados!
+              </span>
+            </div>
+          )}
+
           {syncStatus === "error" && (
-            <p className="text-xs text-red-400/70">API indisponível — insira os troféus manualmente.</p>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
+              <span className="text-xs text-red-400">
+                {syncError}
+              </span>
+            </div>
           )}
         </div>
 
@@ -230,16 +308,13 @@ function BrawlView() {
                 key={mode}
                 onClick={() => setPrazoMode(mode)}
                 className={`px-5 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  prazoMode === mode
-                    ? "bg-accent text-[#0a0a0a]"
-                    : "text-white/40 hover:text-white/70"
+                  prazoMode === mode ? "bg-accent text-[#0a0a0a]" : "text-white/40 hover:text-white/70"
                 }`}
               >
                 {mode === "dias" ? "Nº de Dias" : "Data Final"}
               </button>
             ))}
           </div>
-
           {prazoMode === "dias" ? (
             <input
               type="number"
@@ -261,6 +336,7 @@ function BrawlView() {
 
       <div className="flex flex-col gap-4 lg:sticky lg:top-10">
         <label className="text-xs text-white/40 tracking-widest uppercase">Resultado</label>
+
         <div
           className="rounded-2xl border p-8 flex flex-col gap-8 transition-all duration-500"
           style={{
@@ -275,7 +351,11 @@ function BrawlView() {
             </div>
             <div className="flex flex-col">
               <span className="text-white font-display text-lg tracking-wider">Brawl Stars</span>
-              {tag && <span className="text-white/30 text-xs font-mono">{tag}</span>}
+              {(tag || playerName) && (
+                <span className="text-white/30 text-xs font-mono">
+                  {playerName ? `${playerName} · ${tag}` : tag}
+                </span>
+              )}
             </div>
           </div>
 
@@ -322,6 +402,28 @@ function BrawlView() {
             </div>
           </div>
         </div>
+
+        <button
+          onClick={handleSave}
+          disabled={!resultadoValido || saveStatus === "saving" || saveStatus === "success"}
+          className={`
+            w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl
+            text-sm font-medium tracking-wide transition-all duration-300
+            ${resultadoValido && saveStatus === "idle"
+              ? "bg-accent text-[#0a0a0a] hover:brightness-110 cursor-pointer"
+              : saveStatus === "success"
+                ? "bg-accent/10 border border-accent/30 text-accent cursor-default"
+                : saveStatus === "error"
+                  ? "bg-red-500/10 border border-red-500/30 text-red-400 cursor-default"
+                  : "bg-white/5 border border-white/10 text-white/25 cursor-not-allowed"
+            }
+          `}
+        >
+          {saveStatus === "idle" && <><SaveIcon /> Salvar Meta no Banco</>}
+          {saveStatus === "saving" && <><SpinnerIcon /> Salvando...</>}
+          {saveStatus === "success" && <><CheckIcon /> Meta salva com sucesso na nuvem!</>}
+          {saveStatus === "error" && <><span>✕</span> Erro ao salvar — tente novamente</>}
+        </button>
       </div>
     </div>
   );
