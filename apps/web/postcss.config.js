@@ -1,6 +1,30 @@
 export default {
   plugins: {
-    tailwindcss: { config: './tailwind.config.cjs' }, // trocado para .cjs
+    tailwindcss: {
+      config: {
+        content: [
+          "./index.html",
+          "./src/**/*.{ts,tsx}",
+          "./apps/web/index.html",
+          "./apps/web/src/**/*.{ts,tsx}"
+        ],
+        theme: {
+          extend: {
+            colors: {
+              surface: "#0a0a0a",
+              panel: "#111111",
+              border: "#1f1f1f",
+              accent: "#e8ff47",
+            },
+            fontFamily: {
+              display: ["'Bebas Neue'", "cursive"],
+              body: ["'DM Sans'", "sans-serif"],
+            },
+          },
+        },
+        plugins: [],
+      }
+    },
     autoprefixer: {},
   },
 }
