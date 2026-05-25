@@ -14,7 +14,14 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@minihub/business-logic": ["../../packages/business-logic/src/index.ts"],
+      "@minihub/business-logic/*": ["../../packages/business-logic/src/*"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "../../packages/business-logic/src"]
 }
