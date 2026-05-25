@@ -1,12 +1,23 @@
 import { createClient } from '@supabase/supabase-js';
 
-// 1. Inicializa o Supabase com tratamento para o Vite
-const url = import.meta.env?.VITE_SUPABASE_URL || '';
-const anonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || '';
+// Inicialização segura para não quebrar o build e nem o runtime da Vercel
+let supabaseUrl = '';
+let supabaseAnonKey = '';
 
-export const supabase = createClient(url, anonKey);
+try {
+  supabaseUrl = (import.meta.env?.VITE_SUPABASE_URL) || '';
+  supabaseAnonKey = (import.meta.env?.VITE_SUPABASE_ANON_KEY) || '';
+} catch (e) {
+  // Se der erro ao tentar ler o import.meta (comum em subpacotes), tenta ler do process.env ou deixa vazio
+  console.warn("Variáveis de ambiente do Supabase não encontradas no subpacote.");
+}
 
-// 2. O Serviço de Autenticação que o seu Login.tsx usa (Google e Email)
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder-url-se-tiver-vazia.supabase.co', 
+  supabaseAnonKey || 'placeholder-key'
+);
+
+// O Serviço de Autenticação que o seu Login.tsx usa
 export const authService = {
   async loginWithEmail(email: string) {
     return await supabase.auth.signInWithOtp({
@@ -29,7 +40,7 @@ export const authService = {
   }
 };
 
-// 3. Suas funções de negócio de troféus originais intactas
+// Suas funções de negócio de troféus originais intactas
 export function converterDataEmDias(dataFinal: string): number {
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
