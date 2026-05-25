@@ -2,8 +2,12 @@ import { useState, useEffect } from "react";
 import { User } from "@supabase/supabase-js";
 import { authService } from "@minihub/business-logic";
 import Login from "./pages/Login";
-import { calcularMetaDiaria, converterDataEmDias } from "@minihub/business-logic";
-import { supabase } from "./lib/supabase";
+import {
+  brawlGoalService,
+  calcularMetaDiaria,
+  converterDataEmDias,
+  converterDiasEmData,
+} from "@minihub/business-logic";
 
 type View = "home" | "brawl";
 type PrazoMode = "dias" | "data";
@@ -16,11 +20,6 @@ interface HubCard {
   description: string;
   status: "active" | "locked";
   accentColor: string;
-}
-
-interface BrawlPlayerData {
-  name: string;
-  trophies: number;
 }
 
 const cards: HubCard[] = [
@@ -159,10 +158,11 @@ function HomeView({ onNavigate }: { onNavigate: (view: View) => void }) {
   );
 }
 
-function BrawlView() {
+function BrawlView({ user }: { user: User }) {
   const [tag, setTag] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [syncError, setSyncError] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [trofeusAtuais, setTrofeusAtuais] = useState("");
   const [metaTrofeus, setMetaTrofeus] = useState("");
   const [prazoMode, setPrazoMode] = useState<PrazoMode>("dias");
@@ -171,45 +171,89 @@ function BrawlView() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
-  const diasResolvidos = prazoMode === "dias" ? parseInt(numeroDias) || 0 : converterDataEmDias(dataFinal);
+  const dataFinalResolvida = prazoMode === "dias" ? converterDiasEmData(parseInt(numeroDias) || 0) : dataFinal;
+  const diasResolvidos = dataFinalResolvida ? converterDataEmDias(dataFinalResolvida) : 0;
   const atual = parseInt(trofeusAtuais) || 0;
   const meta = parseInt(metaTrofeus) || 0;
   const metaDiaria = calcularMetaDiaria(atual, meta, diasResolvidos);
   const trofeusFaltando = Math.max(0, meta - atual);
   const resultadoValido = diasResolvidos > 0 && meta > atual;
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadSavedGoal() {
+      setSyncStatus("loading");
+      setSyncError("");
+      try {
+        const goal = await brawlGoalService.syncSavedGoal(user.id);
+        if (!active) return;
+        if (!goal) {
+          setSyncStatus("idle");
+          return;
+        }
+
+        setTag(goal.player_tag ?? "");
+        setPlayerName(goal.player_name ?? "");
+        setTrofeusAtuais(goal.trofeus_atuais.toString());
+        setMetaTrofeus(goal.trofeus_meta.toString());
+        setPrazoMode("data");
+        setDataFinal(goal.data_final);
+        setNumeroDias(goal.prazo_dias.toString());
+        setSyncStatus("success");
+      } catch (err: unknown) {
+        if (!active) return;
+        setSyncStatus("error");
+        setSyncError(err instanceof Error ? err.message : "Erro ao carregar meta salva.");
+      }
+    }
+
+    loadSavedGoal();
+
+    return () => {
+      active = false;
+    };
+  }, [user.id]);
+
   const handleSync = async () => {
     if (!tag.trim()) return;
     setSyncStatus("loading");
     setSyncError("");
     setPlayerName("");
-    const { data, error } = await supabase.rpc("buscar_brawl_stars", { player_tag: tag.trim() });
-    if (error || !data) {
+    try {
+      const player = await brawlGoalService.fetchPlayer(tag.trim());
+      setPlayerName(player.name);
+      setTrofeusAtuais(player.trophies.toString());
+      setSyncStatus("success");
+    } catch (err: unknown) {
       setSyncStatus("error");
-      setSyncError(error?.message ?? "Erro desconhecido ao buscar jogador.");
-      return;
+      setSyncError(err instanceof Error ? err.message : "Erro desconhecido ao buscar jogador.");
     }
-    const player = data as BrawlPlayerData;
-    setPlayerName(player.name);
-    setTrofeusAtuais(player.trophies.toString());
-    setSyncStatus("success");
   };
 
   const handleSave = async () => {
     if (!resultadoValido) return;
     setSaveStatus("saving");
-    const { error } = await supabase.from("metas_brawl").insert({
-      player_tag: tag.trim() || null,
-      trofeus_atuais: atual,
-      trofeus_meta: meta,
-      prazo_dias: diasResolvidos,
-    });
-    if (error) {
-      setSaveStatus("error");
-      setTimeout(() => setSaveStatus("idle"), 3000);
-    } else {
+    setSaveError("");
+    try {
+      const goal = await brawlGoalService.saveGoal({
+        userId: user.id,
+        playerTag: tag.trim() || null,
+        playerName: playerName || null,
+        trofeusAtuais: atual,
+        trofeusMeta: meta,
+        dataFinal: dataFinalResolvida,
+      });
+
+      setPrazoMode("data");
+      setDataFinal(goal.data_final);
+      setNumeroDias(goal.prazo_dias.toString());
       setSaveStatus("success");
       setTimeout(() => setSaveStatus("idle"), 4000);
+    } catch (err: unknown) {
+      setSaveStatus("error");
+      setSaveError(err instanceof Error ? err.message : "Erro ao salvar meta.");
+      setTimeout(() => setSaveStatus("idle"), 3000);
     }
   };
 
@@ -338,7 +382,7 @@ function BrawlView() {
           {saveStatus === "idle" && <><SaveIcon /> Salvar Meta no Banco</>}
           {saveStatus === "saving" && <><SpinnerIcon /> Salvando...</>}
           {saveStatus === "success" && <><CheckIcon /> Meta salva com sucesso na nuvem!</>}
-          {saveStatus === "error" && <><span>✕</span> Erro ao salvar — tente novamente</>}
+          {saveStatus === "error" && <><span>✕</span> {saveError || "Erro ao salvar — tente novamente"}</>}
         </button>
       </div>
     </div>
@@ -388,7 +432,7 @@ function MainApp({ user, onSignOut }: { user: User; onSignOut: () => void }) {
       </header>
 
       {view === "home" && <HomeView onNavigate={setView} />}
-      {view === "brawl" && <BrawlView />}
+      {view === "brawl" && <BrawlView user={user} />}
     </div>
   );
 }
