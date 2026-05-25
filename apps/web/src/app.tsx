@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { User } from "@supabase/supabase-js";
+import { authService } from "@minihub/business-logic";
+import Login from "./pages/Login";
 import { calcularMetaDiaria, converterDataEmDias } from "@minihub/business-logic";
 import { supabase } from "./lib/supabase";
 
@@ -13,6 +16,11 @@ interface HubCard {
   description: string;
   status: "active" | "locked";
   accentColor: string;
+}
+
+interface BrawlPlayerData {
+  name: string;
+  trophies: number;
 }
 
 const cards: HubCard[] = [
@@ -87,10 +95,20 @@ function CheckIcon() {
   );
 }
 
-function SpinnerIcon() {
+function SpinnerIcon({ className }: { className?: string }) {
   return (
-    <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg className={`animate-spin ${className ?? ""}`} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </svg>
+  );
+}
+
+function LogoutIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
     </svg>
   );
 }
@@ -102,7 +120,6 @@ function HomeView({ onNavigate }: { onNavigate: (view: View) => void }) {
         <h2 className="text-white/90 text-2xl font-display tracking-widest uppercase">Seus Jogos</h2>
         <p className="text-white/30 text-sm">Selecione um módulo para começar</p>
       </div>
-
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {cards.map((card) => (
           <div
@@ -124,23 +141,15 @@ function HomeView({ onNavigate }: { onNavigate: (view: View) => void }) {
               </div>
             )}
             <div className={`p-6 flex flex-col justify-between h-full gap-8 ${card.status === "locked" ? "opacity-0" : ""}`}>
-              <div className="flex items-start justify-between">
-                <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center"
-                  style={{ background: `${card.accentColor}15`, border: `1px solid ${card.accentColor}30` }}
-                >
-                  {card.id === 1 && <BrawlStarsIcon size={32} />}
-                </div>
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: `${card.accentColor}15`, border: `1px solid ${card.accentColor}30` }}>
+                {card.id === 1 && <BrawlStarsIcon size={32} />}
               </div>
               <div className="flex flex-col gap-1">
                 <h3 className="font-display text-2xl tracking-wider text-white">{card.title}</h3>
                 <p className="text-sm text-white/30 font-light">{card.description}</p>
               </div>
               {card.status === "active" && (
-                <div
-                  className="h-px w-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-full"
-                  style={{ background: `linear-gradient(to right, ${card.accentColor}80, transparent)` }}
-                />
+                <div className="h-px w-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-full" style={{ background: `linear-gradient(to right, ${card.accentColor}80, transparent)` }} />
               )}
             </div>
           </div>
@@ -162,10 +171,7 @@ function BrawlView() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
-  const diasResolvidos = prazoMode === "dias"
-    ? parseInt(numeroDias) || 0
-    : converterDataEmDias(dataFinal);
-
+  const diasResolvidos = prazoMode === "dias" ? parseInt(numeroDias) || 0 : converterDataEmDias(dataFinal);
   const atual = parseInt(trofeusAtuais) || 0;
   const meta = parseInt(metaTrofeus) || 0;
   const metaDiaria = calcularMetaDiaria(atual, meta, diasResolvidos);
@@ -177,31 +183,15 @@ function BrawlView() {
     setSyncStatus("loading");
     setSyncError("");
     setPlayerName("");
-
-    const { data, error } = await supabase.rpc("buscar_brawl_stars", {
-      player_tag: tag.trim(),
-    });
-
+    const { data, error } = await supabase.rpc("buscar_brawl_stars", { player_tag: tag.trim() });
     if (error || !data) {
       setSyncStatus("error");
-      setSyncError(error?.message || "Erro de conexão com o banco.");
+      setSyncError(error?.message ?? "Erro desconhecido ao buscar jogador.");
       return;
     }
-
-    if (data.reason === "notFound") {
-      setSyncStatus("error");
-      setSyncError("Tag inválida. Use a tag real de jogador (ex: #9YV2CC2).");
-      return;
-    }
-
-    if (data.reason || !data.name) {
-      setSyncStatus("error");
-      setSyncError(data.message || "Erro retornado pela API da Supercell.");
-      return;
-    }
-
-    setPlayerName(data.name);
-    setTrofeusAtuais(data.trophies.toString());
+    const player = data as BrawlPlayerData;
+    setPlayerName(player.name);
+    setTrofeusAtuais(player.trophies.toString());
     setSyncStatus("success");
   };
 
@@ -239,104 +229,54 @@ function BrawlView() {
           <h2 className="font-display text-3xl tracking-widest text-white uppercase">Configurar Meta</h2>
           <p className="text-sm text-white/30">Preencha os dados para calcular sua meta diária</p>
         </div>
-
         <div className="flex flex-col gap-2">
           <label className="text-xs text-white/40 tracking-widest uppercase">Tag do Jogador</label>
           <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="#PLAYER TAG"
-              value={tag}
-              onChange={(e) => handleTagChange(e.target.value)}
-              className={inputClass + " flex-1"}
-            />
-            <button
-              onClick={handleSync}
-              disabled={syncStatus === "loading" || !tag.trim()}
-              className="flex items-center gap-2 px-4 py-3 rounded-xl border border-accent/30 bg-accent/10 text-accent text-sm font-medium hover:bg-accent/20 transition-colors duration-200 disabled:opacity-50 whitespace-nowrap"
-            >
+            <input type="text" placeholder="#PLAYER TAG" value={tag} onChange={(e) => handleTagChange(e.target.value)} className={inputClass + " flex-1"} />
+            <button onClick={handleSync} disabled={syncStatus === "loading" || !tag.trim()} className="flex items-center gap-2 px-4 py-3 rounded-xl border border-accent/30 bg-accent/10 text-accent text-sm font-medium hover:bg-accent/20 transition-colors duration-200 disabled:opacity-50 whitespace-nowrap">
               {syncStatus === "loading" ? <SpinnerIcon /> : <SyncIcon />}
               {syncStatus === "loading" ? "Buscando..." : "Sincronizar"}
             </button>
           </div>
-
           {syncStatus === "success" && playerName && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/10 border border-accent/20">
               <CheckIcon />
-              <span className="text-xs text-accent font-medium">
-                {playerName} · {trofeusAtuais} troféus sincronizados!
-              </span>
+              <span className="text-xs text-accent font-medium">{playerName} · {trofeusAtuais} troféus sincronizados!</span>
             </div>
           )}
-
           {syncStatus === "error" && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
-              <span className="text-xs text-red-400">
-                {syncError}
-              </span>
+              <span className="text-xs text-red-400">{syncError || "Tag não encontrada — verifique e tente novamente."}</span>
             </div>
           )}
         </div>
-
         <div className="flex flex-col gap-2">
           <label className="text-xs text-white/40 tracking-widest uppercase">Troféus Atuais</label>
-          <input
-            type="number"
-            placeholder="Ex: 45000"
-            value={trofeusAtuais}
-            onChange={(e) => setTrofeusAtuais(e.target.value)}
-            className={inputClass}
-          />
+          <input type="number" placeholder="Ex: 45000" value={trofeusAtuais} onChange={(e) => setTrofeusAtuais(e.target.value)} className={inputClass} />
         </div>
-
         <div className="flex flex-col gap-2">
           <label className="text-xs text-white/40 tracking-widest uppercase">Meta de Troféus</label>
-          <input
-            type="number"
-            placeholder="Ex: 50000"
-            value={metaTrofeus}
-            onChange={(e) => setMetaTrofeus(e.target.value)}
-            className={inputClass}
-          />
+          <input type="number" placeholder="Ex: 50000" value={metaTrofeus} onChange={(e) => setMetaTrofeus(e.target.value)} className={inputClass} />
         </div>
-
         <div className="flex flex-col gap-3">
           <label className="text-xs text-white/40 tracking-widest uppercase">Prazo</label>
           <div className="flex gap-2 p-1 bg-[#0d0d0d] border border-border rounded-xl w-fit">
             {(["dias", "data"] as PrazoMode[]).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setPrazoMode(mode)}
-                className={`px-5 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  prazoMode === mode ? "bg-accent text-[#0a0a0a]" : "text-white/40 hover:text-white/70"
-                }`}
-              >
+              <button key={mode} onClick={() => setPrazoMode(mode)} className={`px-5 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${prazoMode === mode ? "bg-accent text-[#0a0a0a]" : "text-white/40 hover:text-white/70"}`}>
                 {mode === "dias" ? "Nº de Dias" : "Data Final"}
               </button>
             ))}
           </div>
           {prazoMode === "dias" ? (
-            <input
-              type="number"
-              placeholder="Ex: 30"
-              value={numeroDias}
-              onChange={(e) => setNumeroDias(e.target.value)}
-              className={inputClass}
-            />
+            <input type="number" placeholder="Ex: 30" value={numeroDias} onChange={(e) => setNumeroDias(e.target.value)} className={inputClass} />
           ) : (
-            <input
-              type="date"
-              value={dataFinal}
-              onChange={(e) => setDataFinal(e.target.value)}
-              className={inputClass + " [color-scheme:dark]"}
-            />
+            <input type="date" value={dataFinal} onChange={(e) => setDataFinal(e.target.value)} className={inputClass + " [color-scheme:dark]"} />
           )}
         </div>
       </div>
 
       <div className="flex flex-col gap-4 lg:sticky lg:top-10">
         <label className="text-xs text-white/40 tracking-widest uppercase">Resultado</label>
-
         <div
           className="rounded-2xl border p-8 flex flex-col gap-8 transition-all duration-500"
           style={{
@@ -352,53 +292,33 @@ function BrawlView() {
             <div className="flex flex-col">
               <span className="text-white font-display text-lg tracking-wider">Brawl Stars</span>
               {(tag || playerName) && (
-                <span className="text-white/30 text-xs font-mono">
-                  {playerName ? `${playerName} · ${tag}` : tag}
-                </span>
+                <span className="text-white/30 text-xs font-mono">{playerName ? `${playerName} · ${tag}` : tag}</span>
               )}
             </div>
           </div>
-
           <div className="flex flex-col items-center gap-2 py-4">
             <span className="text-xs text-white/30 tracking-widest uppercase">Meta Diária</span>
-            <span
-              className="font-display leading-none tracking-tight transition-all duration-300"
-              style={{
-                fontSize: "clamp(4rem, 12vw, 7rem)",
-                color: resultadoValido ? "#e8ff47" : "rgba(255,255,255,0.08)",
-              }}
-            >
+            <span className="font-display leading-none tracking-tight transition-all duration-300" style={{ fontSize: "clamp(4rem, 12vw, 7rem)", color: resultadoValido ? "#e8ff47" : "rgba(255,255,255,0.08)" }}>
               {resultadoValido ? metaDiaria : "—"}
             </span>
-            {resultadoValido && (
-              <span className="text-white/30 text-sm">troféus por dia</span>
-            )}
+            {resultadoValido && <span className="text-white/30 text-sm">troféus por dia</span>}
           </div>
-
           <div className="border-t border-white/5 pt-6 grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1">
               <span className="text-[11px] text-white/25 tracking-widest uppercase">Dias Restantes</span>
-              <span className="text-white font-display text-2xl tracking-wide">
-                {diasResolvidos > 0 ? diasResolvidos : "—"}
-              </span>
+              <span className="text-white font-display text-2xl tracking-wide">{diasResolvidos > 0 ? diasResolvidos : "—"}</span>
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-[11px] text-white/25 tracking-widest uppercase">Total Faltando</span>
-              <span className="text-white font-display text-2xl tracking-wide">
-                {trofeusFaltando > 0 ? trofeusFaltando.toLocaleString("pt-BR") : "—"}
-              </span>
+              <span className="text-white font-display text-2xl tracking-wide">{trofeusFaltando > 0 ? trofeusFaltando.toLocaleString("pt-BR") : "—"}</span>
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-[11px] text-white/25 tracking-widest uppercase">Atual</span>
-              <span className="text-white/60 font-display text-2xl tracking-wide">
-                {atual > 0 ? atual.toLocaleString("pt-BR") : "—"}
-              </span>
+              <span className="text-white/60 font-display text-2xl tracking-wide">{atual > 0 ? atual.toLocaleString("pt-BR") : "—"}</span>
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-[11px] text-white/25 tracking-widest uppercase">Meta</span>
-              <span className="text-white/60 font-display text-2xl tracking-wide">
-                {meta > 0 ? meta.toLocaleString("pt-BR") : "—"}
-              </span>
+              <span className="text-white/60 font-display text-2xl tracking-wide">{meta > 0 ? meta.toLocaleString("pt-BR") : "—"}</span>
             </div>
           </div>
         </div>
@@ -409,14 +329,10 @@ function BrawlView() {
           className={`
             w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl
             text-sm font-medium tracking-wide transition-all duration-300
-            ${resultadoValido && saveStatus === "idle"
-              ? "bg-accent text-[#0a0a0a] hover:brightness-110 cursor-pointer"
-              : saveStatus === "success"
-                ? "bg-accent/10 border border-accent/30 text-accent cursor-default"
-                : saveStatus === "error"
-                  ? "bg-red-500/10 border border-red-500/30 text-red-400 cursor-default"
-                  : "bg-white/5 border border-white/10 text-white/25 cursor-not-allowed"
-            }
+            ${resultadoValido && saveStatus === "idle" ? "bg-accent text-[#0a0a0a] hover:brightness-110 cursor-pointer"
+              : saveStatus === "success" ? "bg-accent/10 border border-accent/30 text-accent cursor-default"
+              : saveStatus === "error" ? "bg-red-500/10 border border-red-500/30 text-red-400 cursor-default"
+              : "bg-white/5 border border-white/10 text-white/25 cursor-not-allowed"}
           `}
         >
           {saveStatus === "idle" && <><SaveIcon /> Salvar Meta no Banco</>}
@@ -429,18 +345,17 @@ function BrawlView() {
   );
 }
 
-export default function App() {
+function MainApp({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   const [view, setView] = useState<View>("home");
+  const displayName = user.user_metadata?.full_name ?? user.email ?? "Usuário";
+  const avatarLetter = displayName.charAt(0).toUpperCase();
 
   return (
     <div className="min-h-screen bg-surface font-body flex flex-col">
       <header className="w-full px-8 py-5 flex items-center justify-between border-b border-border">
         <div className="flex items-center gap-4">
           {view !== "home" && (
-            <button
-              onClick={() => setView("home")}
-              className="flex items-center gap-2 text-white/40 hover:text-white transition-colors duration-200 text-sm"
-            >
+            <button onClick={() => setView("home")} className="flex items-center gap-2 text-white/40 hover:text-white transition-colors duration-200 text-sm">
               <ArrowLeftIcon />
               <span className="hidden sm:inline">Voltar ao Hub</span>
             </button>
@@ -457,11 +372,18 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-sm text-white/40">Olá,</span>
-          <span className="text-sm text-white/80 font-medium">Admin</span>
-          <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center">
-            <span className="text-[#0a0a0a] text-xs font-display tracking-wide">A</span>
+          <span className="text-sm text-white/40 hidden sm:inline">Olá,</span>
+          <span className="text-sm text-white/80 font-medium hidden sm:inline truncate max-w-[140px]">{displayName}</span>
+          <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center shrink-0">
+            <span className="text-[#0a0a0a] text-xs font-display tracking-wide">{avatarLetter}</span>
           </div>
+          <button
+            onClick={onSignOut}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-white/30 hover:text-white hover:border-white/20 transition-colors duration-200 text-xs"
+          >
+            <LogoutIcon />
+            <span className="hidden sm:inline">Sair</span>
+          </button>
         </div>
       </header>
 
@@ -469,4 +391,38 @@ export default function App() {
       {view === "brawl" && <BrawlView />}
     </div>
   );
+}
+
+export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const { unsubscribe } = authService.onAuthStateChange((currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleSignOut = async () => {
+    await authService.signOut();
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <SpinnerIcon className="w-8 h-8 text-accent" />
+          <span className="text-white/20 text-xs font-body tracking-widest uppercase">Carregando</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
+
+  return <MainApp user={user} onSignOut={handleSignOut} />;
 }

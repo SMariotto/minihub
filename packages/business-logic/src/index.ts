@@ -17,3 +17,5 @@ export function calcularMetaDiaria(
   if (faltam <= 0) return 0;
   return Math.ceil(faltam / dias);
 }
+
+export * from './services/auth';
