@@ -50,7 +50,7 @@ export const authService = {
   async signInWithGoogle(): Promise<void> {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: typeof window !== 'undefined' ? window.location.origin : 'https://minihub-web.vercel.app' },
     });
 
     if (error) throw error;
