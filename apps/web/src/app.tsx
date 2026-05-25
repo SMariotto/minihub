@@ -16,7 +16,7 @@ interface HubCard {
 }
 
 const cards: HubCard[] = [
-  { id: 1, title: "Brawl Stars", description: "Gerenciador de Metas de Troféus", status: "active", accentColor: "#e8ff47" },
+  { id: 1, title: "LULINHA", description: "Gerenciador de Metas de Troféus", status: "active", accentColor: "#e8ff47" },
   { id: 2, title: "Clash Royale", description: "Em breve", status: "locked", accentColor: "#4fffff" },
   { id: 3, title: "Clash of Clans", description: "Em breve", status: "locked", accentColor: "#ff9d4e" },
 ];
