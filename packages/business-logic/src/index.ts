@@ -1,42 +1,22 @@
-import { createClient } from '@supabase/supabase-js';
-
-// Inicialização segura para não quebrar o build e nem o runtime da Vercel
-let supabaseUrl = '';
-let supabaseAnonKey = '';
-
-try {
-  supabaseUrl = (import.meta.env?.VITE_SUPABASE_URL) || '';
-  supabaseAnonKey = (import.meta.env?.VITE_SUPABASE_ANON_KEY) || '';
-} catch (e) {
-  // Se der erro ao tentar ler o import.meta (comum em subpacotes), tenta ler do process.env ou deixa vazio
-  console.warn("Variáveis de ambiente do Supabase não encontradas no subpacote.");
-}
-
-export const supabase = createClient(
-  supabaseUrl || 'https://placeholder-url-se-tiver-vazia.supabase.co', 
-  supabaseAnonKey || 'placeholder-key'
-);
-
-// O Serviço de Autenticação que o seu Login.tsx usa
+// O Serviço de Autenticação apenas encapsula as funções sem iniciar o cliente aqui
 export const authService = {
-  async loginWithEmail(email: string) {
-    return await supabase.auth.signInWithOtp({
+  getSupabase(client: any) {
+    return client;
+  },
+  async loginWithEmail(supabaseClient: any, email: string) {
+    return await supabaseClient.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: window.location.origin,
-      },
+      options: { emailRedirectTo: window.location.origin }
     });
   },
-  async loginWithGoogle() {
-    return await supabase.auth.signInWithOAuth({
+  async loginWithGoogle(supabaseClient: any) {
+    return await supabaseClient.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
+      options: { redirectTo: window.location.origin }
     });
   },
-  async logout() {
-    return await supabase.auth.signOut();
+  async logout(supabaseClient: any) {
+    return await supabaseClient.auth.signOut();
   }
 };
 
