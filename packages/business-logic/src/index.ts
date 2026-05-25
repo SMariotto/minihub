@@ -1,12 +1,35 @@
 import { createClient } from '@supabase/supabase-js';
 
-// 1. Inicializa e exporta o Supabase direto na raiz da lógica
+// 1. Inicializa o Supabase com tratamento para o Vite
 const url = import.meta.env?.VITE_SUPABASE_URL || '';
 const anonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || '';
 
 export const supabase = createClient(url, anonKey);
 
-// 2. Suas funções de negócio originais intactas
+// 2. O Serviço de Autenticação que o seu Login.tsx usa (Google e Email)
+export const authService = {
+  async loginWithEmail(email: string) {
+    return await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: window.location.origin,
+      },
+    });
+  },
+  async loginWithGoogle() {
+    return await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+  },
+  async logout() {
+    return await supabase.auth.signOut();
+  }
+};
+
+// 3. Suas funções de negócio de troféus originais intactas
 export function converterDataEmDias(dataFinal: string): number {
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
