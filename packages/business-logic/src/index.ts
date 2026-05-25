@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-client';
+import { createClient } from '@supabase/supabase-js';
 
 // 1. Inicializa e exporta o Supabase direto na raiz da lógica
 const url = import.meta.env?.VITE_SUPABASE_URL || '';
