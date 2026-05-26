@@ -60,7 +60,7 @@ export default async function handler(req: BrawlPlayerRequest, res: BrawlPlayerR
 
     const tagParam = Array.isArray(req.query.tag) ? req.query.tag[0] : req.query.tag;
     if (!tagParam) {
-      res.status(400).json({ error: "Parâmetro tag obrigatório." });
+      res.status(400).json({ error: "Parametro tag obrigatorio." });
       return;
     }
 
