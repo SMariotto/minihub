@@ -4,6 +4,23 @@ import { authService } from "@minihub/business-logic";
 
 type AuthMode = "login" | "signup";
 
+function stringifyForDisplay(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (value == null) return "";
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error) return err.message === "[object Object]" ? fallback : err.message;
+  return stringifyForDisplay(err) || fallback;
+}
+
 function GoogleIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -62,7 +79,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
       onLoginSuccess(user);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Ocorreu um erro inesperado.");
+      setError(getErrorMessage(err, "Ocorreu um erro inesperado."));
     } finally {
       setLoading(false);
     }
@@ -74,7 +91,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     try {
       await authService.signInWithGoogle();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Erro ao iniciar login com Google.");
+      setError(getErrorMessage(err, "Erro ao iniciar login com Google."));
       setGoogleLoading(false);
     }
   };

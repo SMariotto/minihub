@@ -36,6 +36,23 @@ const cards: HubCard[] = [
   { id: 3, title: "Clash of Clans", description: "Em breve", status: "locked", accentColor: "#ff9d4e" },
 ];
 
+function stringifyForDisplay(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (value == null) return "";
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error) return err.message === "[object Object]" ? fallback : err.message;
+  return stringifyForDisplay(err) || fallback;
+}
+
 function LockIcon() {
   return (
     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -221,7 +238,7 @@ function TrophyCalculatorView({
       } catch (err: unknown) {
         if (!active) return;
         setSyncStatus("error");
-        setSyncError(err instanceof Error ? err.message : "Erro ao carregar meta salva.");
+        setSyncError(getErrorMessage(err, "Erro ao carregar meta salva."));
       }
     }
 
@@ -244,7 +261,7 @@ function TrophyCalculatorView({
       setSyncStatus("success");
     } catch (err: unknown) {
       setSyncStatus("error");
-      setSyncError(err instanceof Error ? err.message : "Erro desconhecido ao buscar jogador.");
+      setSyncError(getErrorMessage(err, "Erro desconhecido ao buscar jogador."));
     }
   };
 
@@ -269,7 +286,7 @@ function TrophyCalculatorView({
       setTimeout(() => setSaveStatus("idle"), 4000);
     } catch (err: unknown) {
       setSaveStatus("error");
-      setSaveError(err instanceof Error ? err.message : "Erro ao salvar meta.");
+      setSaveError(getErrorMessage(err, "Erro ao salvar meta."));
       setTimeout(() => setSaveStatus("idle"), 3000);
     }
   };
@@ -504,7 +521,7 @@ function RankingsView() {
         setRows(rankingRows);
       } catch (err: unknown) {
         if (!active) return;
-        setError(err instanceof Error ? err.message : "Erro ao carregar rankings.");
+        setError(getErrorMessage(err, "Erro ao carregar rankings."));
       } finally {
         if (active) setLoading(false);
       }
@@ -597,7 +614,7 @@ function BrawlStarsView({ user }: { user: User }) {
       } catch (err: unknown) {
         if (!active) return;
         setProfileStatus("error");
-        setProfileError(err instanceof Error ? err.message : "Erro ao carregar Tag.");
+        setProfileError(getErrorMessage(err, "Erro ao carregar Tag."));
       }
     }
 
@@ -626,7 +643,7 @@ function BrawlStarsView({ user }: { user: User }) {
       setTimeout(() => setProfileStatus("idle"), 3000);
     } catch (err: unknown) {
       setProfileStatus("error");
-      setProfileError(err instanceof Error ? err.message : "Erro ao salvar Tag.");
+      setProfileError(getErrorMessage(err, "Erro ao salvar Tag."));
     }
   };
 
@@ -701,7 +718,8 @@ function BrawlStarsView({ user }: { user: User }) {
 
 function MainApp({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   const [view, setView] = useState<View>("home");
-  const displayName = user.user_metadata?.full_name ?? user.email ?? "Usuário";
+  const fullName = user.user_metadata?.full_name;
+  const displayName = stringifyForDisplay(fullName) || user.email || "Usuário";
   const avatarLetter = displayName.charAt(0).toUpperCase();
 
   return (

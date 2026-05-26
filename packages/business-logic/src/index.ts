@@ -263,6 +263,32 @@ function mapBrawlApiResponse(response: { profile: BrawlApiProfile; battlelog?: {
   };
 }
 
+function stringifyUnknown(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (!value) return "";
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function extractApiErrorMessage(data: unknown, fallback: string): string {
+  if (data && typeof data === "object") {
+    const record = data as Record<string, unknown>;
+    return (
+      stringifyUnknown(record.message) ||
+      stringifyUnknown(record.error) ||
+      stringifyUnknown(record.reason) ||
+      fallback
+    );
+  }
+
+  return stringifyUnknown(data) || fallback;
+}
+
 function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
@@ -337,7 +363,7 @@ export const brawlGoalService = {
 
     const data = await response.json().catch(() => null);
     if (!response.ok) {
-      throw new Error(data?.message ?? data?.error ?? "Erro ao buscar jogador na API oficial.");
+      throw new Error(extractApiErrorMessage(data, "Erro ao buscar jogador na API oficial."));
     }
     if (!data?.profile) throw new Error("Jogador não encontrado.");
 
