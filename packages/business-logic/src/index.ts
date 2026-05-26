@@ -110,6 +110,14 @@ export interface BrawlPlayerData {
   trophies: number;
 }
 
+export interface BrawlProfile {
+  user_id: string;
+  player_tag: string;
+  player_name: string | null;
+  current_trophies: number | null;
+  updated_at?: string;
+}
+
 export interface BrawlGoal {
   id?: string;
   user_id: string;
@@ -130,6 +138,102 @@ export interface BrawlGoalInput {
   trofeusMeta: number;
   dataFinal: string;
 }
+
+export interface AccountValueInput {
+  brawlersUnlocked: number;
+  totalBrawlers: number;
+  powerLevelTotal: number;
+  maxPowerLevelTotal: number;
+  gadgetsOwned: number;
+  maxGadgets: number;
+  starPowersOwned: number;
+  maxStarPowers: number;
+  xpLevel: number;
+}
+
+export interface AccountValueScore {
+  rawScore: number;
+  ageAdjustedScore: number;
+  maturityFactor: number;
+}
+
+export type BrawlRankingPeriod = "all-time" | "monthly" | "daily" | "average";
+
+export interface BrawlRankingRow {
+  user_id: string;
+  player_tag: string;
+  player_name: string | null;
+  victories: number;
+  defeats: number;
+  participations: number;
+  trophies_delta: number;
+  performance_average: number;
+}
+
+function clampScore(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function ratio(value: number, max: number): number {
+  if (max <= 0) return 0;
+  return Math.max(0, Math.min(1, value / max));
+}
+
+export function calculateAccountValueScore(input: AccountValueInput): AccountValueScore {
+  const collectionScore = ratio(input.brawlersUnlocked, input.totalBrawlers) * 35;
+  const powerScore = ratio(input.powerLevelTotal, input.maxPowerLevelTotal) * 30;
+  const gadgetScore = ratio(input.gadgetsOwned, input.maxGadgets) * 15;
+  const starPowerScore = ratio(input.starPowersOwned, input.maxStarPowers) * 15;
+  const xpScore = ratio(input.xpLevel, 300) * 5;
+  const rawScore = clampScore(collectionScore + powerScore + gadgetScore + starPowerScore + xpScore);
+  const maturityFactor = Math.max(0.75, Math.min(1.15, 1 + (input.xpLevel - 120) / 1000));
+
+  return {
+    rawScore,
+    ageAdjustedScore: clampScore(rawScore * maturityFactor),
+    maturityFactor: Math.round(maturityFactor * 100) / 100,
+  };
+}
+
+export const brawlProfileService = {
+  async getProfile(userId: string): Promise<BrawlProfile | null> {
+    const { data, error } = await supabase
+      .from("brawl_profiles")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data as BrawlProfile | null;
+  },
+
+  async savePlayerTag(userId: string, playerTag: string): Promise<BrawlProfile> {
+    const normalizedTag = playerTag.trim().toUpperCase();
+    const player = await brawlGoalService.fetchPlayer(normalizedTag);
+    const payload = {
+      user_id: userId,
+      player_tag: normalizedTag,
+      player_name: player.name,
+      current_trophies: player.trophies,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from("brawl_profiles")
+      .upsert(payload, { onConflict: "user_id" })
+      .select("*")
+      .single();
+
+    if (error) throw error;
+    return data as BrawlProfile;
+  },
+
+  async syncProfile(userId: string): Promise<BrawlProfile | null> {
+    const profile = await this.getProfile(userId);
+    if (!profile?.player_tag) return profile;
+    return this.savePlayerTag(userId, profile.player_tag);
+  },
+};
 
 export const brawlGoalService = {
   async fetchPlayer(playerTag: string): Promise<BrawlPlayerData> {
