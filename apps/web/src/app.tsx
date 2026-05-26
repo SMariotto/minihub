@@ -558,7 +558,7 @@ function RankingsView() {
   );
 }
 
-function BrawlStarsView({ user }: { user: User }) {
+export default function BrawlStarsView({ user }: { user: User }) {
   const [activeTab, setActiveTab] = useState<BrawlTab>("calculator");
   const [playerTag, setPlayerTag] = useState("2G82YGL820");
   const [playerName, setPlayerName] = useState("");
@@ -716,25 +716,15 @@ function MainApp({ user, onSignOut }: { user: User; onSignOut: () => void }) {
           )}
           {view !== "home" && <div className="w-px h-5 bg-border" />}
           <div className="flex items-center gap-3">
-            <span className="font-display text-3xl tracking-widest text-white">MINIhub</span>
-            {view === "brawl" && (
-              <span className="text-xs text-accent/70 border border-accent/20 bg-accent/10 px-2 py-0.5 rounded-md font-body tracking-widest uppercase">
-                Brawl Stars
-              </span>
-            )}
+            <span className="text-white/40 text-sm font-light">Olá,</span>
+            <span className="text-white text-sm font-medium">{displayName}</span>
           </div>
         </div>
-
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-white/40 hidden sm:inline">Olá,</span>
-          <span className="text-sm text-white/80 font-medium hidden sm:inline truncate max-w-[140px]">{displayName}</span>
-          <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center shrink-0">
-            <span className="text-[#0a0a0a] text-xs font-display tracking-wide">{avatarLetter}</span>
+        <div className="flex items-center gap-4">
+          <div className="w-8 h-8 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center text-accent text-xs font-display">
+            {avatarLetter}
           </div>
-          <button
-            onClick={onSignOut}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-white/30 hover:text-white hover:border-white/20 transition-colors duration-200 text-xs"
-          >
+          <button onClick={onSignOut} className="flex items-center gap-2 text-white/30 hover:text-red-400 transition-colors duration-200 text-sm font-medium">
             <LogoutIcon />
             <span className="hidden sm:inline">Sair</span>
           </button>
@@ -752,31 +742,33 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { unsubscribe } = authService.onAuthStateChange((currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
-    });
-    return () => unsubscribe();
+    async function checkUser() {
+      try {
+        const currentUser = await authService.getCurrentUser();
+        setUser(currentUser);
+      } catch (err) {
+        console.error("Erro ao verificar autenticação:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    checkUser();
   }, []);
-
-  const handleSignOut = async () => {
-    await authService.signOut();
-  };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <SpinnerIcon className="w-8 h-8 text-accent" />
-          <span className="text-white/20 text-xs font-body tracking-widest uppercase">Carregando</span>
-        </div>
+      <div className="min-h-screen bg-surface flex items-center justify-center">
+        <SpinnerIcon className="text-accent w-8 h-8" />
       </div>
     );
   }
 
   if (!user) {
-    return <Login />;
+    return <Login onLoginSuccess={setUser} />;
   }
 
-  return <MainApp user={user} onSignOut={handleSignOut} />;
+  return <MainApp user={user} onSignOut={async () => {
+    await authService.signOut();
+    setUser(null);
+  }} />;
 }
