@@ -353,6 +353,15 @@ function extractApiErrorMessage(data: unknown, fallback: string): string {
   return stringifyUnknown(data) || fallback;
 }
 
+function isDuplicateKeyError(err: unknown): boolean {
+  return Boolean(
+    err &&
+    typeof err === "object" &&
+    "code" in err &&
+    (err as { code?: unknown }).code === "23505"
+  );
+}
+
 function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
@@ -407,7 +416,12 @@ export const brawlProfileService = {
       .select("*")
       .single();
 
-    if (error) throw error;
+    if (error) {
+      if (!isDuplicateKeyError(error)) throw error;
+      await brawlGoalService.storePlayerHistory(userId, player);
+      return payload as BrawlProfile;
+    }
+
     await brawlGoalService.storePlayerHistory(userId, player);
     return data as BrawlProfile;
   },
