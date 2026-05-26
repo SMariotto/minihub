@@ -180,6 +180,7 @@ interface BrawlRpcPlayer {
   starPowersOwned?: unknown;
   maxStarPowers?: unknown;
   totalVictories?: unknown;
+  battlelog?: unknown;
   reason?: unknown;
   message?: unknown;
 }
@@ -294,6 +295,21 @@ function numberFromUnknown(value: unknown, fallback: number): number {
   return Number.isFinite(numberValue) ? numberValue : fallback;
 }
 
+function mapBrawlRpcBattlelog(value: unknown): BrawlBattleLogItem[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.map((item) => {
+    const battle = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+
+    return {
+      battleTime: stringifyUnknown(battle.battleTime) || new Date().toISOString(),
+      result: normalizeBattleResult(stringifyUnknown(battle.result)),
+      trophiesDelta: numberFromUnknown(battle.trophiesDelta, 0),
+      raw: battle.raw ?? item,
+    };
+  });
+}
+
 function mapBrawlRpcResponse(data: unknown, requestedTag: string): BrawlPlayerData {
   const player = (Array.isArray(data) ? data[0] : data) as BrawlRpcPlayer | null;
 
@@ -331,7 +347,7 @@ function mapBrawlRpcResponse(data: unknown, requestedTag: string): BrawlPlayerDa
     starPowersOwned: numberFromUnknown(player.starPowersOwned, 0),
     maxStarPowers: Math.max(1, numberFromUnknown(player.maxStarPowers, 1)),
     totalVictories: numberFromUnknown(player.totalVictories, 0),
-    battlelog: [],
+    battlelog: mapBrawlRpcBattlelog(player.battlelog),
   };
 }
 
@@ -444,20 +460,18 @@ export const brawlProfileService = {
 export const brawlGoalService = {
   async fetchPlayer(playerTag: string): Promise<BrawlPlayerData> {
     const normalizedTag = normalizePlayerTag(playerTag);
-    if (typeof window !== "undefined") {
-      try {
-        return await this.fetchPlayerViaApi(normalizedTag);
-      } catch (err) {
-        console.warn("[business-logic] Falha na API oficial; usando RPC do Supabase como fallback.", err);
-      }
+    try {
+      const { data, error } = await supabase.rpc("buscar_brawl_stars", {
+        player_tag: normalizedTag,
+      });
+
+      if (error) throw error;
+      return mapBrawlRpcResponse(data, normalizedTag);
+    } catch (err) {
+      if (typeof window === "undefined") throw err;
+      console.warn("[business-logic] Falha na RPC do Supabase; usando rota local como fallback.", err);
+      return this.fetchPlayerViaApi(normalizedTag);
     }
-
-    const { data, error } = await supabase.rpc("buscar_brawl_stars", {
-      player_tag: normalizedTag,
-    });
-
-    if (error) throw error;
-    return mapBrawlRpcResponse(data, normalizedTag);
   },
 
   async fetchPlayerViaApi(playerTag: string): Promise<BrawlPlayerData> {
