@@ -461,17 +461,22 @@ export const brawlGoalService = {
   async fetchPlayer(playerTag: string): Promise<BrawlPlayerData> {
     const normalizedTag = normalizePlayerTag(playerTag);
     try {
-      const { data, error } = await supabase.rpc("buscar_brawl_stars", {
-        player_tag: normalizedTag,
-      });
-
-      if (error) throw error;
-      return mapBrawlRpcResponse(data, normalizedTag);
+      return await this.fetchPlayerViaSupabaseFunction(normalizedTag);
     } catch (err) {
       if (typeof window === "undefined") throw err;
-      console.warn("[business-logic] Falha na RPC do Supabase; usando rota local como fallback.", err);
+      console.warn("[business-logic] Falha na Edge Function do Supabase; usando rota local como fallback.", err);
       return this.fetchPlayerViaApi(normalizedTag);
     }
+  },
+
+  async fetchPlayerViaSupabaseFunction(playerTag: string): Promise<BrawlPlayerData> {
+    const { data, error } = await supabase.functions.invoke("brawl-stars-player", {
+      body: { tag: normalizePlayerTag(playerTag) },
+    });
+
+    if (error) throw error;
+    if (!data?.profile) throw new Error("Jogador nÃ£o encontrado.");
+    return mapBrawlApiResponse(data);
   },
 
   async fetchPlayerViaApi(playerTag: string): Promise<BrawlPlayerData> {
