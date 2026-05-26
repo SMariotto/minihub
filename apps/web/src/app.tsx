@@ -53,6 +53,12 @@ function getErrorMessage(err: unknown, fallback: string): string {
   return stringifyForDisplay(err) || fallback;
 }
 
+function coerceInputText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  return "";
+}
+
 function LockIcon() {
   return (
     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -303,7 +309,7 @@ function TrophyCalculatorView({
         <div className="flex flex-col gap-2">
           <label className="text-xs text-white/40 tracking-widest uppercase">Jogador Vinculado</label>
           <div className="flex gap-2">
-            <input type="text" value={playerTag || "Cadastre sua Tag no topo"} readOnly className={inputClass + " flex-1"} />
+            <input type="text" value={playerTag} readOnly placeholder="Insira sua Tag no topo" className={inputClass + " flex-1"} />
             <button onClick={handleSync} disabled={syncStatus === "loading" || !playerTag.trim()} className="flex items-center gap-2 px-4 py-3 rounded-xl border border-accent/30 bg-accent/10 text-accent text-sm font-medium hover:bg-accent/20 transition-colors duration-200 disabled:opacity-50 whitespace-nowrap">
               {syncStatus === "loading" ? <SpinnerIcon /> : <SyncIcon />}
               {syncStatus === "loading" ? "Buscando..." : "Sincronizar"}
@@ -577,7 +583,7 @@ function RankingsView() {
 
 function BrawlStarsView({ user }: { user: User }) {
   const [activeTab, setActiveTab] = useState<BrawlTab>("calculator");
-  const [playerTag, setPlayerTag] = useState("2G82YGL820");
+  const [playerTag, setPlayerTag] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [currentTrophies, setCurrentTrophies] = useState<number | null>(null);
   const [playerData, setPlayerData] = useState<BrawlPlayerData | null>(null);
@@ -599,11 +605,12 @@ function BrawlStarsView({ user }: { user: User }) {
       try {
         const profile = await brawlProfileService.syncProfile(user.id);
         if (!active) return;
-        setPlayerTag(profile?.player_tag ?? "2G82YGL820");
-        setPlayerName(profile?.player_name ?? "");
-        setCurrentTrophies(profile?.current_trophies ?? null);
-        if (profile?.player_tag) {
-          const player = await brawlGoalService.fetchPlayer(profile.player_tag);
+        const savedPlayerTag = coerceInputText(profile?.player_tag);
+        setPlayerTag(savedPlayerTag);
+        setPlayerName(coerceInputText(profile?.player_name));
+        setCurrentTrophies(typeof profile?.current_trophies === "number" ? profile.current_trophies : null);
+        if (savedPlayerTag) {
+          const player = await brawlGoalService.fetchPlayer(savedPlayerTag);
           await brawlGoalService.storePlayerHistory(user.id, player);
           if (!active) return;
           setPlayerData(player);
@@ -631,10 +638,11 @@ function BrawlStarsView({ user }: { user: User }) {
     setProfileError("");
     try {
       const profile = await brawlProfileService.savePlayerTag(user.id, playerTag);
-      setPlayerTag(profile.player_tag);
-      setPlayerName(profile.player_name ?? "");
-      setCurrentTrophies(profile.current_trophies ?? null);
-      const player = await brawlGoalService.fetchPlayer(profile.player_tag);
+      const savedPlayerTag = coerceInputText(profile.player_tag);
+      setPlayerTag(savedPlayerTag);
+      setPlayerName(coerceInputText(profile.player_name));
+      setCurrentTrophies(typeof profile.current_trophies === "number" ? profile.current_trophies : null);
+      const player = await brawlGoalService.fetchPlayer(savedPlayerTag);
       await brawlGoalService.storePlayerHistory(user.id, player);
       setPlayerData(player);
       setPlayerName(player.name);
@@ -664,7 +672,7 @@ function BrawlStarsView({ user }: { user: User }) {
               <input
                 value={playerTag}
                 onChange={(event) => setPlayerTag(event.target.value.toUpperCase())}
-                placeholder="2G82YGL820"
+                placeholder="Ex: #2G82YGL820"
                 className={inputClass}
               />
               <button
