@@ -464,23 +464,6 @@ export const brawlGoalService = {
     }
 
     const playerTag = normalizePlayerTag(player.tag);
-    const snapshot = {
-      user_id: userId,
-      player_tag: playerTag,
-      total_victories: player.totalVictories,
-      current_trophies: player.trophies,
-      exp_level: player.expLevel,
-      raw_payload: {
-        brawlersUnlocked: player.brawlersUnlocked,
-        powerLevelTotal: player.powerLevelTotal,
-        gadgetsOwned: player.gadgetsOwned,
-        starPowersOwned: player.starPowersOwned,
-      },
-    };
-
-    const { error: snapshotError } = await supabase.from("brawl_player_snapshots").insert(snapshot);
-    if (snapshotError) throw snapshotError;
-
     if (player.battlelog.length === 0) return;
 
     const rows = player.battlelog.map((battle) => ({
@@ -576,13 +559,13 @@ export const brawlRankingService = {
       since.setTime(0);
     }
 
-    const { data: snapshots, error: snapshotError } = await supabase
-      .from("brawl_player_snapshots")
-      .select("user_id, player_tag, total_victories, current_trophies, created_at")
-      .gte("created_at", since.toISOString())
-      .order("created_at", { ascending: false });
+    const { data: profiles, error: profileError } = await supabase
+      .from("brawl_profiles")
+      .select("user_id, player_tag, player_name, current_trophies, updated_at")
+      .gte("updated_at", since.toISOString())
+      .order("updated_at", { ascending: false });
 
-    if (snapshotError) throw snapshotError;
+    if (profileError) throw profileError;
 
     const { data: battles, error: battleError } = await supabase
       .from("brawl_match_history")
@@ -593,17 +576,17 @@ export const brawlRankingService = {
 
     const rows = new Map<string, BrawlRankingRow>();
 
-    for (const snapshot of snapshots ?? []) {
-      const key = `${snapshot.user_id}:${snapshot.player_tag}`;
+    for (const profile of profiles ?? []) {
+      const key = `${profile.user_id}:${profile.player_tag}`;
       if (!rows.has(key)) {
         rows.set(key, {
-          user_id: String(snapshot.user_id),
-          player_tag: String(snapshot.player_tag),
-          player_name: null,
-          victories: Number(snapshot.total_victories ?? 0),
+          user_id: String(profile.user_id),
+          player_tag: String(profile.player_tag),
+          player_name: profile.player_name ? String(profile.player_name) : null,
+          victories: 0,
           defeats: 0,
           participations: 0,
-          trophies_delta: Number(snapshot.current_trophies ?? 0),
+          trophies_delta: Number(profile.current_trophies ?? 0),
           performance_average: 0,
         });
       }
