@@ -1,11 +1,24 @@
 const BRAWL_STARS_API_BASE = "https://api.brawlstars.com/v1";
 
+interface BrawlPlayerRequest {
+  method?: string;
+  query: {
+    tag?: string | string[];
+  };
+}
+
+interface BrawlPlayerResponse {
+  status(code: number): {
+    json(body: unknown): void;
+  };
+}
+
 function normalizeTag(tag: string): string {
   const trimmed = tag.trim().toUpperCase();
   return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
 }
 
-async function fetchBrawlStars(path: string) {
+async function fetchBrawlStars(path: string): Promise<{ status: number; body: unknown }> {
   const apiKey = process.env.BRAWL_STARS_API_KEY;
   if (!apiKey) {
     return {
@@ -25,7 +38,7 @@ async function fetchBrawlStars(path: string) {
   return { status: response.status, body };
 }
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req: BrawlPlayerRequest, res: BrawlPlayerResponse) {
   if (req.method !== "GET") {
     res.status(405).json({ error: "Method not allowed" });
     return;

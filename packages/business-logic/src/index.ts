@@ -5,8 +5,16 @@ import {
   User,
 } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+type MinihubImportMeta = ImportMeta & {
+  env?: {
+    VITE_SUPABASE_URL?: string;
+    VITE_SUPABASE_ANON_KEY?: string;
+  };
+};
+
+const supabaseEnv = (import.meta as MinihubImportMeta).env;
+const supabaseUrl = supabaseEnv?.VITE_SUPABASE_URL;
+const supabaseAnonKey = supabaseEnv?.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn(
@@ -337,9 +345,14 @@ export const brawlGoalService = {
   },
 
   async storePlayerHistory(userId: string, player: BrawlPlayerData): Promise<void> {
+    if (!player.tag) {
+      throw new Error("Tag do jogador ausente ao salvar histórico.");
+    }
+
+    const playerTag = normalizePlayerTag(player.tag);
     const snapshot = {
       user_id: userId,
-      player_tag: player.tag || normalizePlayerTag(player.name),
+      player_tag: playerTag,
       total_victories: player.totalVictories,
       current_trophies: player.trophies,
       exp_level: player.expLevel,
@@ -351,13 +364,14 @@ export const brawlGoalService = {
       },
     };
 
-    await supabase.from("brawl_player_snapshots").insert(snapshot);
+    const { error: snapshotError } = await supabase.from("brawl_player_snapshots").insert(snapshot);
+    if (snapshotError) throw snapshotError;
 
     if (player.battlelog.length === 0) return;
 
     const rows = player.battlelog.map((battle) => ({
       user_id: userId,
-      player_tag: player.tag,
+      player_tag: playerTag,
       battle_time: battle.battleTime,
       result: battle.result,
       trophies_delta: battle.trophiesDelta,
@@ -365,10 +379,11 @@ export const brawlGoalService = {
       raw_payload: battle.raw,
     }));
 
-    await supabase.from("brawl_match_history").upsert(rows, {
+    const { error: battlelogError } = await supabase.from("brawl_match_history").upsert(rows, {
       onConflict: "user_id,battle_time,player_tag",
       ignoreDuplicates: true,
     });
+    if (battlelogError) throw battlelogError;
   },
 
   async getGoal(userId: string): Promise<BrawlGoal | null> {

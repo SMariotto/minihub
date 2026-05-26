@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { User } from "@supabase/supabase-js";
 import { authService } from "@minihub/business-logic";
 
 type AuthMode = "login" | "signup";
@@ -22,7 +23,11 @@ function BrawlStarsIcon() {
   );
 }
 
-export default function Login() {
+interface LoginProps {
+  onLoginSuccess: (user: User) => void;
+}
+
+export default function Login({ onLoginSuccess }: LoginProps) {
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,11 +56,11 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      if (isLogin) {
-        await authService.signInWithEmail(email.trim(), password);
-      } else {
-        await authService.signUpWithEmail(email.trim(), password);
-      }
+      const user = isLogin
+        ? await authService.signInWithEmail(email.trim(), password)
+        : await authService.signUpWithEmail(email.trim(), password);
+
+      onLoginSuccess(user);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Ocorreu um erro inesperado.");
     } finally {

@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { User } from "@supabase/supabase-js";
-import { authService } from "@minihub/business-logic";
 import Login from "./pages/Login";
 import {
   AccountValueInput,
   BrawlPlayerData,
   BrawlRankingRow,
+  authService,
   brawlRankingService,
   brawlProfileService,
   brawlGoalService,
@@ -558,7 +558,7 @@ function RankingsView() {
   );
 }
 
-export default function BrawlStarsView({ user }: { user: User }) {
+function BrawlStarsView({ user }: { user: User }) {
   const [activeTab, setActiveTab] = useState<BrawlTab>("calculator");
   const [playerTag, setPlayerTag] = useState("2G82YGL820");
   const [playerName, setPlayerName] = useState("");
