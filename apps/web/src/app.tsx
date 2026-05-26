@@ -4,6 +4,9 @@ import { authService } from "@minihub/business-logic";
 import Login from "./pages/Login";
 import {
   AccountValueInput,
+  BrawlPlayerData,
+  BrawlRankingRow,
+  brawlRankingService,
   brawlProfileService,
   brawlGoalService,
   calcularMetaDiaria,
@@ -168,11 +171,13 @@ function TrophyCalculatorView({
   playerTag,
   playerName,
   currentTrophies,
+  onPlayerSync,
 }: {
   user: User;
   playerTag: string;
   playerName: string;
   currentTrophies: number | null;
+  onPlayerSync: (player: BrawlPlayerData) => void;
 }) {
   const [syncError, setSyncError] = useState("");
   const [saveError, setSaveError] = useState("");
@@ -233,6 +238,8 @@ function TrophyCalculatorView({
     setSyncError("");
     try {
       const player = await brawlGoalService.fetchPlayer(playerTag.trim());
+      await brawlGoalService.storePlayerHistory(user.id, player);
+      onPlayerSync(player);
       setTrofeusAtuais(player.trophies.toString());
       setSyncStatus("success");
     } catch (err: unknown) {
@@ -392,7 +399,7 @@ function TrophyCalculatorView({
   );
 }
 
-function AccountValueView() {
+function AccountValueView({ playerData }: { playerData: BrawlPlayerData | null }) {
   const [values, setValues] = useState<AccountValueInput>({
     brawlersUnlocked: 0,
     totalBrawlers: 80,
@@ -404,6 +411,22 @@ function AccountValueView() {
     maxStarPowers: 160,
     xpLevel: 1,
   });
+
+  useEffect(() => {
+    if (!playerData) return;
+    setValues({
+      brawlersUnlocked: playerData.brawlersUnlocked,
+      totalBrawlers: playerData.totalBrawlers,
+      powerLevelTotal: playerData.powerLevelTotal,
+      maxPowerLevelTotal: playerData.maxPowerLevelTotal,
+      gadgetsOwned: playerData.gadgetsOwned,
+      maxGadgets: playerData.maxGadgets,
+      starPowersOwned: playerData.starPowersOwned,
+      maxStarPowers: playerData.maxStarPowers,
+      xpLevel: playerData.expLevel,
+    });
+  }, [playerData]);
+
   const score = calculateAccountValueScore(values);
   const inputClass = "w-full bg-[#0d0d0d] border border-border rounded-xl px-4 py-3 text-white text-sm font-body placeholder-white/20 focus:outline-none focus:border-accent/50 transition-colors duration-200";
   const updateValue = (key: keyof AccountValueInput, value: string) => {
@@ -459,12 +482,40 @@ function AccountValueView() {
 
 function RankingsView() {
   const [rankingTab, setRankingTab] = useState<RankingTab>("all-time");
+  const [rows, setRows] = useState<BrawlRankingRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const tabs: Array<{ id: RankingTab; label: string }> = [
     { id: "all-time", label: "Desde Sempre" },
     { id: "monthly", label: "Mensal" },
     { id: "daily", label: "Diário" },
     { id: "average", label: "Média de Desempenho" },
   ];
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadRankings() {
+      setLoading(true);
+      setError("");
+      try {
+        const rankingRows = await brawlRankingService.getRankings(rankingTab);
+        if (!active) return;
+        setRows(rankingRows);
+      } catch (err: unknown) {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : "Erro ao carregar rankings.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadRankings();
+
+    return () => {
+      active = false;
+    };
+  }, [rankingTab]);
 
   return (
     <div className="flex-1 px-6 md:px-10 py-10 flex flex-col gap-6">
@@ -488,9 +539,20 @@ function RankingsView() {
           <span>Derrotas</span>
           <span>Partidas</span>
         </div>
-        <div className="px-5 py-10 text-center text-sm text-white/30">
-          Ranking {tabs.find((tab) => tab.id === rankingTab)?.label} pronto para receber históricos do Supabase.
-        </div>
+        {loading && <div className="px-5 py-10 text-center text-sm text-white/30">Carregando rankings...</div>}
+        {error && <div className="px-5 py-10 text-center text-sm text-red-400">{error}</div>}
+        {!loading && !error && rows.length === 0 && (
+          <div className="px-5 py-10 text-center text-sm text-white/30">Nenhum histórico sincronizado para este período.</div>
+        )}
+        {!loading && !error && rows.map((row, index) => (
+          <div key={`${row.user_id}-${row.player_tag}`} className="grid grid-cols-[64px_1fr_repeat(3,minmax(80px,120px))] gap-4 px-5 py-4 border-b border-white/5 text-sm text-white/70">
+            <span className="font-display text-white">{index + 1}</span>
+            <span className="font-mono">{row.player_tag}</span>
+            <span>{row.victories.toLocaleString("pt-BR")}</span>
+            <span>{row.defeats.toLocaleString("pt-BR")}</span>
+            <span>{row.participations.toLocaleString("pt-BR")}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -498,9 +560,10 @@ function RankingsView() {
 
 function BrawlStarsView({ user }: { user: User }) {
   const [activeTab, setActiveTab] = useState<BrawlTab>("calculator");
-  const [playerTag, setPlayerTag] = useState("");
+  const [playerTag, setPlayerTag] = useState("2G82YGL820");
   const [playerName, setPlayerName] = useState("");
   const [currentTrophies, setCurrentTrophies] = useState<number | null>(null);
+  const [playerData, setPlayerData] = useState<BrawlPlayerData | null>(null);
   const [profileStatus, setProfileStatus] = useState<SaveStatus>("idle");
   const [profileError, setProfileError] = useState("");
   const inputClass = "w-full bg-[#0d0d0d] border border-border rounded-xl px-4 py-3 text-white text-sm font-body placeholder-white/20 focus:outline-none focus:border-accent/50 transition-colors duration-200";
@@ -519,9 +582,17 @@ function BrawlStarsView({ user }: { user: User }) {
       try {
         const profile = await brawlProfileService.syncProfile(user.id);
         if (!active) return;
-        setPlayerTag(profile?.player_tag ?? "");
+        setPlayerTag(profile?.player_tag ?? "2G82YGL820");
         setPlayerName(profile?.player_name ?? "");
         setCurrentTrophies(profile?.current_trophies ?? null);
+        if (profile?.player_tag) {
+          const player = await brawlGoalService.fetchPlayer(profile.player_tag);
+          await brawlGoalService.storePlayerHistory(user.id, player);
+          if (!active) return;
+          setPlayerData(player);
+          setPlayerName(player.name);
+          setCurrentTrophies(player.trophies);
+        }
         setProfileStatus("idle");
       } catch (err: unknown) {
         if (!active) return;
@@ -537,7 +608,7 @@ function BrawlStarsView({ user }: { user: User }) {
     };
   }, [user.id]);
 
-  const handleSaveTag = async () => {
+  const handleSyncTag = async () => {
     if (!playerTag.trim()) return;
     setProfileStatus("saving");
     setProfileError("");
@@ -546,6 +617,11 @@ function BrawlStarsView({ user }: { user: User }) {
       setPlayerTag(profile.player_tag);
       setPlayerName(profile.player_name ?? "");
       setCurrentTrophies(profile.current_trophies ?? null);
+      const player = await brawlGoalService.fetchPlayer(profile.player_tag);
+      await brawlGoalService.storePlayerHistory(user.id, player);
+      setPlayerData(player);
+      setPlayerName(player.name);
+      setCurrentTrophies(player.trophies);
       setProfileStatus("success");
       setTimeout(() => setProfileStatus("idle"), 3000);
     } catch (err: unknown) {
@@ -571,16 +647,16 @@ function BrawlStarsView({ user }: { user: User }) {
               <input
                 value={playerTag}
                 onChange={(event) => setPlayerTag(event.target.value.toUpperCase())}
-                placeholder="#PLAYER TAG"
+                placeholder="2G82YGL820"
                 className={inputClass}
               />
               <button
-                onClick={handleSaveTag}
+                onClick={handleSyncTag}
                 disabled={profileStatus === "saving" || !playerTag.trim()}
                 className="flex items-center gap-2 px-4 py-3 rounded-xl border border-accent/30 bg-accent/10 text-accent text-sm font-medium hover:bg-accent/20 transition-colors duration-200 disabled:opacity-50 whitespace-nowrap"
               >
                 {profileStatus === "saving" ? <SpinnerIcon /> : <SaveIcon />}
-                Salvar Tag
+                Sincronizar
               </button>
             </div>
             {playerName && (
@@ -610,9 +686,14 @@ function BrawlStarsView({ user }: { user: User }) {
           playerTag={playerTag}
           playerName={playerName}
           currentTrophies={currentTrophies}
+          onPlayerSync={(player) => {
+            setPlayerData(player);
+            setPlayerName(player.name);
+            setCurrentTrophies(player.trophies);
+          }}
         />
       )}
-      {activeTab === "value" && <AccountValueView />}
+      {activeTab === "value" && <AccountValueView playerData={playerData} />}
       {activeTab === "rankings" && <RankingsView />}
     </div>
   );

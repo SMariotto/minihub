@@ -108,6 +108,50 @@ export function calcularMetaDiaria(
 export interface BrawlPlayerData {
   name: string;
   trophies: number;
+  tag: string;
+  expLevel: number;
+  brawlersUnlocked: number;
+  totalBrawlers: number;
+  powerLevelTotal: number;
+  maxPowerLevelTotal: number;
+  gadgetsOwned: number;
+  maxGadgets: number;
+  starPowersOwned: number;
+  maxStarPowers: number;
+  totalVictories: number;
+  battlelog: BrawlBattleLogItem[];
+}
+
+export interface BrawlBattleLogItem {
+  battleTime: string;
+  result: "victory" | "defeat" | "draw";
+  trophiesDelta: number;
+  raw: unknown;
+}
+
+interface BrawlApiBrawler {
+  power?: number;
+  gadgets?: unknown[];
+  starPowers?: unknown[];
+}
+
+interface BrawlApiProfile {
+  tag?: string;
+  name?: string;
+  trophies?: number;
+  expLevel?: number;
+  "3vs3Victories"?: number;
+  soloVictories?: number;
+  duoVictories?: number;
+  brawlers?: BrawlApiBrawler[];
+}
+
+interface BrawlApiBattleLogItem {
+  battleTime?: string;
+  battle?: {
+    result?: string;
+    trophyChange?: number;
+  };
 }
 
 export interface BrawlProfile {
@@ -170,6 +214,47 @@ export interface BrawlRankingRow {
   performance_average: number;
 }
 
+function normalizeBattleResult(result: string | undefined): "victory" | "defeat" | "draw" {
+  if (result === "victory") return "victory";
+  if (result === "defeat") return "defeat";
+  return "draw";
+}
+
+function normalizePlayerTag(playerTag: string): string {
+  const tag = playerTag.trim().toUpperCase();
+  return tag.startsWith("#") ? tag : `#${tag}`;
+}
+
+function mapBrawlApiResponse(response: { profile: BrawlApiProfile; battlelog?: { items?: BrawlApiBattleLogItem[] } }): BrawlPlayerData {
+  const brawlers = response.profile.brawlers ?? [];
+  const totalVictories =
+    (response.profile["3vs3Victories"] ?? 0) +
+    (response.profile.soloVictories ?? 0) +
+    (response.profile.duoVictories ?? 0);
+
+  return {
+    name: String(response.profile.name ?? ""),
+    tag: String(response.profile.tag ?? ""),
+    trophies: response.profile.trophies ?? 0,
+    expLevel: response.profile.expLevel ?? 0,
+    brawlersUnlocked: brawlers.length,
+    totalBrawlers: Math.max(1, brawlers.length),
+    powerLevelTotal: brawlers.reduce((sum, brawler) => sum + (brawler.power ?? 0), 0),
+    maxPowerLevelTotal: Math.max(1, brawlers.length * 11),
+    gadgetsOwned: brawlers.reduce((sum, brawler) => sum + (brawler.gadgets?.length ?? 0), 0),
+    maxGadgets: Math.max(1, brawlers.length * 2),
+    starPowersOwned: brawlers.reduce((sum, brawler) => sum + (brawler.starPowers?.length ?? 0), 0),
+    maxStarPowers: Math.max(1, brawlers.length * 2),
+    totalVictories,
+    battlelog: (response.battlelog?.items ?? []).map((item) => ({
+      battleTime: item.battleTime ?? new Date().toISOString(),
+      result: normalizeBattleResult(item.battle?.result),
+      trophiesDelta: item.battle?.trophyChange ?? 0,
+      raw: item,
+    })),
+  };
+}
+
 function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
@@ -225,6 +310,7 @@ export const brawlProfileService = {
       .single();
 
     if (error) throw error;
+    await brawlGoalService.storePlayerHistory(userId, player);
     return data as BrawlProfile;
   },
 
@@ -237,22 +323,52 @@ export const brawlProfileService = {
 
 export const brawlGoalService = {
   async fetchPlayer(playerTag: string): Promise<BrawlPlayerData> {
-    const { data, error } = await supabase.rpc("buscar_brawl_stars", {
-      player_tag: playerTag.trim(),
+    const response = await fetch(`/api/brawl-stars/player?tag=${encodeURIComponent(normalizePlayerTag(playerTag))}`, {
+      headers: { Accept: "application/json" },
     });
 
-    if (error) throw error;
-    if (!data) throw new Error("Jogador não encontrado.");
-
-    const player = Array.isArray(data) ? data[0] : data;
-    if (!player || typeof player.trophies !== "number") {
-      throw new Error("Resposta inválida ao buscar dados do jogador.");
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(data?.message ?? data?.error ?? "Erro ao buscar jogador na API oficial.");
     }
+    if (!data?.profile) throw new Error("Jogador não encontrado.");
 
-    return {
-      name: String(player.name ?? ""),
-      trophies: player.trophies,
+    return mapBrawlApiResponse(data);
+  },
+
+  async storePlayerHistory(userId: string, player: BrawlPlayerData): Promise<void> {
+    const snapshot = {
+      user_id: userId,
+      player_tag: player.tag || normalizePlayerTag(player.name),
+      total_victories: player.totalVictories,
+      current_trophies: player.trophies,
+      exp_level: player.expLevel,
+      raw_payload: {
+        brawlersUnlocked: player.brawlersUnlocked,
+        powerLevelTotal: player.powerLevelTotal,
+        gadgetsOwned: player.gadgetsOwned,
+        starPowersOwned: player.starPowersOwned,
+      },
     };
+
+    await supabase.from("brawl_player_snapshots").insert(snapshot);
+
+    if (player.battlelog.length === 0) return;
+
+    const rows = player.battlelog.map((battle) => ({
+      user_id: userId,
+      player_tag: player.tag,
+      battle_time: battle.battleTime,
+      result: battle.result,
+      trophies_delta: battle.trophiesDelta,
+      participation_count: 1,
+      raw_payload: battle.raw,
+    }));
+
+    await supabase.from("brawl_match_history").upsert(rows, {
+      onConflict: "user_id,battle_time,player_tag",
+      ignoreDuplicates: true,
+    });
   },
 
   async getGoal(userId: string): Promise<BrawlGoal | null> {
@@ -316,5 +432,82 @@ export const brawlGoalService = {
       trofeusMeta: goal.trofeus_meta,
       dataFinal: prazoDias > 0 ? dataFinal : goal.data_final,
     });
+  },
+};
+
+export const brawlRankingService = {
+  async getRankings(period: BrawlRankingPeriod): Promise<BrawlRankingRow[]> {
+    const since = new Date();
+    if (period === "daily") {
+      since.setHours(0, 0, 0, 0);
+    } else if (period === "monthly") {
+      since.setDate(1);
+      since.setHours(0, 0, 0, 0);
+    } else {
+      since.setTime(0);
+    }
+
+    const { data: snapshots, error: snapshotError } = await supabase
+      .from("brawl_player_snapshots")
+      .select("user_id, player_tag, total_victories, current_trophies, created_at")
+      .gte("created_at", since.toISOString())
+      .order("created_at", { ascending: false });
+
+    if (snapshotError) throw snapshotError;
+
+    const { data: battles, error: battleError } = await supabase
+      .from("brawl_match_history")
+      .select("user_id, player_tag, result, participation_count, trophies_delta, battle_time")
+      .gte("battle_time", since.toISOString());
+
+    if (battleError) throw battleError;
+
+    const rows = new Map<string, BrawlRankingRow>();
+
+    for (const snapshot of snapshots ?? []) {
+      const key = `${snapshot.user_id}:${snapshot.player_tag}`;
+      if (!rows.has(key)) {
+        rows.set(key, {
+          user_id: String(snapshot.user_id),
+          player_tag: String(snapshot.player_tag),
+          player_name: null,
+          victories: Number(snapshot.total_victories ?? 0),
+          defeats: 0,
+          participations: 0,
+          trophies_delta: Number(snapshot.current_trophies ?? 0),
+          performance_average: 0,
+        });
+      }
+    }
+
+    for (const battle of battles ?? []) {
+      const key = `${battle.user_id}:${battle.player_tag}`;
+      const row = rows.get(key) ?? {
+        user_id: String(battle.user_id),
+        player_tag: String(battle.player_tag),
+        player_name: null,
+        victories: 0,
+        defeats: 0,
+        participations: 0,
+        trophies_delta: 0,
+        performance_average: 0,
+      };
+
+      row.victories += battle.result === "victory" ? 1 : 0;
+      row.defeats += battle.result === "defeat" ? 1 : 0;
+      row.participations += Number(battle.participation_count ?? 0);
+      row.trophies_delta += Number(battle.trophies_delta ?? 0);
+      rows.set(key, row);
+    }
+
+    return Array.from(rows.values())
+      .map((row) => ({
+        ...row,
+        performance_average: row.participations > 0 ? Math.round((row.victories / row.participations) * 100) : 0,
+      }))
+      .sort((a, b) => {
+        if (period === "average") return b.performance_average - a.performance_average;
+        return b.victories - a.victories || b.trophies_delta - a.trophies_delta;
+      });
   },
 };
