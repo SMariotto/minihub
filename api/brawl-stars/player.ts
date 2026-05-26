@@ -1,4 +1,4 @@
-const BRAWL_STARS_API_BASE = "https://api.brawlstars.com/v1";
+const BRAWL_STARS_API_BASE = process.env.BRAWL_STARS_API_BASE || "https://api.brawlstars.com/v1";
 
 interface BrawlPlayerRequest {
   method?: string;
