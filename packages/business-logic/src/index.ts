@@ -162,6 +162,24 @@ interface BrawlApiBattleLogItem {
   };
 }
 
+interface BrawlRpcPlayer {
+  name?: unknown;
+  tag?: unknown;
+  trophies?: unknown;
+  expLevel?: unknown;
+  brawlersUnlocked?: unknown;
+  totalBrawlers?: unknown;
+  powerLevelTotal?: unknown;
+  maxPowerLevelTotal?: unknown;
+  gadgetsOwned?: unknown;
+  maxGadgets?: unknown;
+  starPowersOwned?: unknown;
+  maxStarPowers?: unknown;
+  totalVictories?: unknown;
+  reason?: unknown;
+  message?: unknown;
+}
+
 export interface BrawlProfile {
   user_id: string;
   player_tag: string;
@@ -263,6 +281,52 @@ function mapBrawlApiResponse(response: { profile: BrawlApiProfile; battlelog?: {
   };
 }
 
+function numberFromUnknown(value: unknown, fallback: number): number {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function mapBrawlRpcResponse(data: unknown, requestedTag: string): BrawlPlayerData {
+  const player = (Array.isArray(data) ? data[0] : data) as BrawlRpcPlayer | null;
+
+  if (!player || typeof player !== "object") {
+    throw new Error("Jogador não encontrado.");
+  }
+
+  const reason = stringifyUnknown(player.reason);
+  if (reason === "notFound") {
+    throw new Error("Tag inválida. Use a tag real de jogador.");
+  }
+
+  if (reason) {
+    throw new Error(stringifyUnknown(player.message) || reason);
+  }
+
+  const name = stringifyUnknown(player.name);
+  const trophies = numberFromUnknown(player.trophies, NaN);
+
+  if (!name || !Number.isFinite(trophies)) {
+    throw new Error("Resposta inválida ao buscar dados do jogador.");
+  }
+
+  return {
+    name,
+    tag: stringifyUnknown(player.tag) || requestedTag,
+    trophies,
+    expLevel: numberFromUnknown(player.expLevel, 0),
+    brawlersUnlocked: numberFromUnknown(player.brawlersUnlocked, 0),
+    totalBrawlers: Math.max(1, numberFromUnknown(player.totalBrawlers, 1)),
+    powerLevelTotal: numberFromUnknown(player.powerLevelTotal, 0),
+    maxPowerLevelTotal: Math.max(1, numberFromUnknown(player.maxPowerLevelTotal, 1)),
+    gadgetsOwned: numberFromUnknown(player.gadgetsOwned, 0),
+    maxGadgets: Math.max(1, numberFromUnknown(player.maxGadgets, 1)),
+    starPowersOwned: numberFromUnknown(player.starPowersOwned, 0),
+    maxStarPowers: Math.max(1, numberFromUnknown(player.maxStarPowers, 1)),
+    totalVictories: numberFromUnknown(player.totalVictories, 0),
+    battlelog: [],
+  };
+}
+
 function stringifyUnknown(value: unknown): string {
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
@@ -357,6 +421,16 @@ export const brawlProfileService = {
 
 export const brawlGoalService = {
   async fetchPlayer(playerTag: string): Promise<BrawlPlayerData> {
+    const normalizedTag = normalizePlayerTag(playerTag);
+    const { data, error } = await supabase.rpc("buscar_brawl_stars", {
+      player_tag: normalizedTag,
+    });
+
+    if (error) throw error;
+    return mapBrawlRpcResponse(data, normalizedTag);
+  },
+
+  async fetchPlayerViaApi(playerTag: string): Promise<BrawlPlayerData> {
     const response = await fetch(`/api/brawl-stars/player?tag=${encodeURIComponent(normalizePlayerTag(playerTag))}`, {
       headers: { Accept: "application/json" },
     });
