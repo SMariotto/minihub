@@ -154,6 +154,10 @@ interface BrawlApiProfile {
   brawlers?: BrawlApiBrawler[];
 }
 
+interface BrawlApiCatalog {
+  items?: BrawlApiBrawler[];
+}
+
 interface BrawlApiBattleLogItem {
   battleTime?: string;
   battle?: {
@@ -251,8 +255,12 @@ function normalizePlayerTag(playerTag: string): string {
   return tag.startsWith("#") ? tag : `#${tag}`;
 }
 
-function mapBrawlApiResponse(response: { profile: BrawlApiProfile; battlelog?: { items?: BrawlApiBattleLogItem[] } }): BrawlPlayerData {
+function mapBrawlApiResponse(response: { profile: BrawlApiProfile; battlelog?: { items?: BrawlApiBattleLogItem[] }; catalog?: BrawlApiCatalog }): BrawlPlayerData {
   const brawlers = response.profile.brawlers ?? [];
+  const catalogBrawlers = response.catalog?.items ?? [];
+  const totalBrawlers = Math.max(brawlers.length, catalogBrawlers.length, 1);
+  const maxGadgets = catalogBrawlers.reduce((sum, brawler) => sum + (brawler.gadgets?.length ?? 0), 0);
+  const maxStarPowers = catalogBrawlers.reduce((sum, brawler) => sum + (brawler.starPowers?.length ?? 0), 0);
   const totalVictories =
     (response.profile["3vs3Victories"] ?? 0) +
     (response.profile.soloVictories ?? 0) +
@@ -264,13 +272,13 @@ function mapBrawlApiResponse(response: { profile: BrawlApiProfile; battlelog?: {
     trophies: response.profile.trophies ?? 0,
     expLevel: response.profile.expLevel ?? 0,
     brawlersUnlocked: brawlers.length,
-    totalBrawlers: Math.max(1, brawlers.length),
+    totalBrawlers,
     powerLevelTotal: brawlers.reduce((sum, brawler) => sum + (brawler.power ?? 0), 0),
-    maxPowerLevelTotal: Math.max(1, brawlers.length * 11),
+    maxPowerLevelTotal: Math.max(1, totalBrawlers * 11),
     gadgetsOwned: brawlers.reduce((sum, brawler) => sum + (brawler.gadgets?.length ?? 0), 0),
-    maxGadgets: Math.max(1, brawlers.length * 2),
+    maxGadgets: Math.max(1, maxGadgets || totalBrawlers * 2),
     starPowersOwned: brawlers.reduce((sum, brawler) => sum + (brawler.starPowers?.length ?? 0), 0),
-    maxStarPowers: Math.max(1, brawlers.length * 2),
+    maxStarPowers: Math.max(1, maxStarPowers || totalBrawlers * 2),
     totalVictories,
     battlelog: (response.battlelog?.items ?? []).map((item) => ({
       battleTime: item.battleTime ?? new Date().toISOString(),
@@ -436,6 +444,14 @@ export const brawlProfileService = {
 export const brawlGoalService = {
   async fetchPlayer(playerTag: string): Promise<BrawlPlayerData> {
     const normalizedTag = normalizePlayerTag(playerTag);
+    if (typeof window !== "undefined") {
+      try {
+        return await this.fetchPlayerViaApi(normalizedTag);
+      } catch (err) {
+        console.warn("[business-logic] Falha na API oficial; usando RPC do Supabase como fallback.", err);
+      }
+    }
+
     const { data, error } = await supabase.rpc("buscar_brawl_stars", {
       player_tag: normalizedTag,
     });

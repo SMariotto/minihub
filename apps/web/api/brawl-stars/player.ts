@@ -75,10 +75,13 @@ export default async function handler(req: BrawlPlayerRequest, res: BrawlPlayerR
 
     const battlelog = await fetchBrawlStars(`/players/${encodedTag}/battlelog`, apiKey);
     const battlelogBody = battlelog.status >= 400 ? { items: [] } : battlelog.body;
+    const catalog = await fetchBrawlStars("/brawlers", apiKey);
+    const catalogBody = catalog.status >= 400 ? { items: [] } : catalog.body;
 
     res.status(200).json({
       profile: profile.body,
       battlelog: battlelogBody,
+      catalog: catalogBody,
     });
   } catch (err: unknown) {
     res.status(500).json({
