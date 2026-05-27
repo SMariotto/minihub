@@ -1,4 +1,6 @@
 const BRAWL_STARS_API_BASE = Deno.env.get("BRAWL_STARS_API_BASE") || "https://api.brawlstars.com/v1";
+const BRAWL_STARS_PROXY_URL = Deno.env.get("BRAWL_STARS_PROXY_URL") || "";
+const BRAWL_STARS_PROXY_SECRET = Deno.env.get("BRAWL_STARS_PROXY_SECRET") || "";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,11 +23,33 @@ function normalizeTag(tag: string): string {
   return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
 }
 
+function buildUpstreamUrl(path: string): string {
+  const proxyBase = BRAWL_STARS_PROXY_URL.trim();
+  if (!proxyBase) {
+    return `${BRAWL_STARS_API_BASE.replace(/\/+$/, "")}${path}`;
+  }
+
+  if (proxyBase.includes("{path}")) {
+    return proxyBase.replace("{path}", encodeURIComponent(path));
+  }
+
+  return `${proxyBase.replace(/\/+$/, "")}${path}`;
+}
+
 async function fetchBrawlStars(path: string, apiKey: string): Promise<{ status: number; body: unknown }> {
-  const response = await fetch(`${BRAWL_STARS_API_BASE}${path}`, {
+  const isUsingProxy = Boolean(BRAWL_STARS_PROXY_URL.trim());
+  const headers = new Headers({
+    Authorization: `Bearer ${apiKey}`,
+    Accept: "application/json",
+  });
+
+  if (isUsingProxy && BRAWL_STARS_PROXY_SECRET) {
+    headers.set("X-Proxy-Secret", BRAWL_STARS_PROXY_SECRET);
+  }
+
+  const response = await fetch(buildUpstreamUrl(path), {
     headers: {
-      Authorization: `Bearer ${apiKey}`,
-      Accept: "application/json",
+      ...Object.fromEntries(headers.entries()),
     },
   });
 
